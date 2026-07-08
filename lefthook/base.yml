@@ -1,0 +1,48 @@
+# Base git hooks — applies to all repos regardless of toolchain.
+
+pre-commit:
+  parallel: true
+  commands:
+    # Prevent committing unresolved merge conflicts
+    no-merge-markers:
+      glob: "*"
+      run: |
+        if grep -nE '^(<{7}|>{7}|={7})' {staged_files} /dev/null; then
+          echo "ERROR: merge conflict markers found"
+          exit 1
+        fi
+    # Prevent committing files over 5MB
+    no-large-files:
+      run: |
+        max_size=5242880
+        git diff --cached --diff-filter=ACM --name-only -z | while IFS= read -r -d '' f; do
+          size=$(wc -c < "$f")
+          if [ "$size" -gt "$max_size" ]; then
+            echo "ERROR: $f is $(( size / 1048576 ))MB — max is 5MB"
+            exit 1
+          fi
+        done
+    # Validate GitHub Actions workflow syntax
+    actionlint:
+      glob: ".github/workflows/*.yml"
+      run: actionlint {staged_files}
+
+pre-push:
+  parallel: true
+  commands:
+    actionlint-all:
+      glob: ".github/workflows/*.yml"
+      run: actionlint
+
+commit-msg:
+  commands:
+    # Enforce Conventional Commits format: type(scope): description
+    conventional-commit:
+      run: |
+        msg=$(head -1 "$1")
+        if ! echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?\!?:\ .+'; then
+          echo "ERROR: Commit message must follow Conventional Commits format"
+          echo "  Expected: <type>(<scope>): <description>"
+          echo "  Got: $msg"
+          exit 1
+        fi
