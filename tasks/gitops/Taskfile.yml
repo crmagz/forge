@@ -1,0 +1,7 @@
+version: "3"
+
+tasks:
+  default:
+    desc: GitOps tasks (coming soon)
+    cmds:
+      - echo "No gitops tasks defined yet"

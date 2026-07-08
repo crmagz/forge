@@ -1,0 +1,62 @@
+version: "3"
+
+vars:
+  TF_DIR: '{{.TF_DIR | default "."}}'
+  PLAN_FILE: '{{.PLAN_FILE | default "tfplan"}}'
+
+tasks:
+  fmt:
+    desc: Check Terraform formatting
+    cmds:
+      - terraform -chdir={{.TF_DIR}} fmt -check -diff -recursive
+
+  fmt-fix:
+    desc: Fix Terraform formatting
+    cmds:
+      - terraform -chdir={{.TF_DIR}} fmt -recursive
+
+  init:
+    desc: Initialize Terraform with backend
+    cmds:
+      - terraform -chdir={{.TF_DIR}} init
+
+  init-local:
+    desc: Initialize Terraform without backend (for validation)
+    cmds:
+      - terraform -chdir={{.TF_DIR}} init -backend=false
+
+  validate:
+    desc: Validate Terraform configuration
+    cmds:
+      - task: init-local
+      - terraform -chdir={{.TF_DIR}} validate
+
+  plan:
+    desc: Generate Terraform plan
+    cmds:
+      - terraform -chdir={{.TF_DIR}} plan -out={{.PLAN_FILE}}
+
+  plan-destroy:
+    desc: Generate Terraform destroy plan
+    cmds:
+      - terraform -chdir={{.TF_DIR}} plan -destroy -out={{.PLAN_FILE}}
+
+  show:
+    desc: Show plan in human-readable format
+    cmds:
+      - terraform -chdir={{.TF_DIR}} show -no-color {{.PLAN_FILE}}
+
+  test:
+    desc: Run Terraform tests
+    cmds:
+      - terraform -chdir={{.TF_DIR}} test
+
+  trivy:
+    desc: Run Trivy IaC security scan
+    cmds:
+      - trivy config --exit-code 1 {{.TF_DIR}}
+
+  apply:
+    desc: Apply a saved Terraform plan
+    cmds:
+      - terraform -chdir={{.TF_DIR}} apply {{.PLAN_FILE}}

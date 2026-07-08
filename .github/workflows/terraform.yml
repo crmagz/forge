@@ -1,0 +1,323 @@
+# Reusable Terraform workflow — validate, plan, apply, or destroy.
+# Consumers call this via workflow_call. See examples/terraform/ for usage.
+# Tool versions are pinned centrally below; consumers do not specify them.
+#
+# Jobs run in the scope of a GitHub environment (e.g., dev, staging, prod).
+# Each environment must have these variables set:
+#   vars.AWS_PLAN_ROLE_ARN   — IAM role for plan/validate (read-only)
+#   vars.AWS_APPLY_ROLE_ARN  — IAM role for apply/destroy (write)
+# AWS credentials are assumed via OIDC (id-token: write).
+
+name: Terraform
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: "Terraform action: plan, apply, or destroy"
+        type: string
+        required: true
+      environment:
+        description: "Target environment"
+        type: string
+        required: true
+      working-directory:
+        description: "Path to Terraform root module"
+        type: string
+        required: true
+
+env:
+  TERRAFORM_VERSION: "1.15.7"
+  TASK_VERSION: "3.52.0"
+  TRIVY_VERSION: "0.72.0"
+  NO_COLOR: "1"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform-${{ inputs.environment }}-${{ inputs.working-directory }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ ! "${{ inputs.action }}" =~ ^(plan|apply|destroy)$ ]]; then
+            echo "::error::Invalid action '${{ inputs.action }}'. Must be: plan, apply, or destroy"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          version: ${{ env.TASK_VERSION }}
+
+      - name: Install Trivy
+        run: |
+          curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${{ env.TRIVY_VERSION }}/trivy_${{ env.TRIVY_VERSION }}_Linux-64bit.tar.gz" \
+            | tar xzf - -C /usr/local/bin trivy
+
+      - name: Format check
+        run: task iac:fmt TF_DIR=${{ inputs.working-directory }}
+
+      - name: Validate configuration
+        run: task iac:validate TF_DIR=${{ inputs.working-directory }}
+
+      - name: Test
+        run: task iac:test TF_DIR=${{ inputs.working-directory }}
+
+      - name: Security scan
+        run: task iac:trivy TF_DIR=${{ inputs.working-directory }}
+
+  plan:
+    name: Plan
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      has-changes: ${{ steps.check.outputs.has-changes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          version: ${{ env.TASK_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Initialize
+        run: task iac:init TF_DIR=${{ inputs.working-directory }}
+
+      - name: Plan
+        if: inputs.action == 'plan' || inputs.action == 'apply'
+        run: task iac:plan TF_DIR=${{ inputs.working-directory }}
+
+      - name: Plan destroy
+        if: inputs.action == 'destroy'
+        run: task iac:plan-destroy TF_DIR=${{ inputs.working-directory }}
+
+      - name: Show plan
+        id: show
+        run: task iac:show TF_DIR=${{ inputs.working-directory }} > plan-output.txt 2>&1 || true
+
+      - name: Check for changes
+        id: check
+        run: |
+          if grep -q "No changes" plan-output.txt; then
+            echo "has-changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: ${{ inputs.working-directory }}/tfplan
+          retention-days: 1
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Terraform Plan — \`${{ inputs.environment }}\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Action** | \`${{ inputs.action }}\` |"
+            echo "| **Directory** | \`${{ inputs.working-directory }}\` |"
+            echo "| **Terraform** | \`${{ env.TERRAFORM_VERSION }}\` |"
+            echo "| **Changes** | \`${{ steps.check.outputs.has-changes }}\` |"
+            echo ""
+            echo "<details><summary>Plan output</summary>"
+            echo ""
+            echo '```'
+            cat plan-output.txt
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR
+        if: github.event.pull_request != null
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('plan-output.txt', 'utf8');
+            const env = '${{ inputs.environment }}';
+            const marker = `<!-- forge:terraform:${env} -->`;
+
+            const body = [
+              marker,
+              '## Terraform Plan — `' + env + '`',
+              '',
+              '| Field | Value |',
+              '|-------|-------|',
+              '| **Action** | `${{ inputs.action }}` |',
+              '| **Directory** | `${{ inputs.working-directory }}` |',
+              '| **Terraform** | `${{ env.TERRAFORM_VERSION }}` |',
+              '',
+              '<details><summary>Plan output</summary>',
+              '',
+              '```',
+              plan,
+              '```',
+              '',
+              '</details>',
+              '',
+              `*Run by @${context.actor} · ${context.sha.substring(0, 7)}*`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  apply:
+    name: Apply
+    needs: plan
+    if: inputs.action == 'apply' && needs.plan.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          version: ${{ env.TASK_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Initialize
+        run: task iac:init TF_DIR=${{ inputs.working-directory }}
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: ${{ inputs.working-directory }}
+
+      - name: Apply
+        run: task iac:apply TF_DIR=${{ inputs.working-directory }}
+
+      - name: Apply summary
+        run: |
+          {
+            echo "## Terraform Apply — \`${{ inputs.environment }}\`"
+            echo ""
+            echo "Successfully applied Terraform changes."
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Directory** | \`${{ inputs.working-directory }}\` |"
+            echo "| **Terraform** | \`${{ env.TERRAFORM_VERSION }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  destroy:
+    name: Destroy
+    needs: plan
+    if: inputs.action == 'destroy' && needs.plan.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          version: ${{ env.TASK_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Initialize
+        run: task iac:init TF_DIR=${{ inputs.working-directory }}
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: ${{ inputs.working-directory }}
+
+      - name: Destroy
+        run: task iac:apply TF_DIR=${{ inputs.working-directory }}
+
+      - name: Destroy summary
+        run: |
+          {
+            echo "## Terraform Destroy — \`${{ inputs.environment }}\`"
+            echo ""
+            echo "Successfully destroyed Terraform resources."
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Directory** | \`${{ inputs.working-directory }}\` |"
+            echo "| **Terraform** | \`${{ env.TERRAFORM_VERSION }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
