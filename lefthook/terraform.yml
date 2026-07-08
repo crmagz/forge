@@ -1,0 +1,22 @@
+pre-commit:
+  parallel: true
+  commands:
+    terraform-fmt:
+      glob: "*.tf"
+      run: terraform fmt -check -diff {staged_files}
+
+pre-push:
+  parallel: true
+  commands:
+    terraform-validate:
+      glob: "*.tf"
+      run: |
+        find . -name '*.tf' -not -path './.git/*' -exec dirname {} \; | sort -u | while IFS= read -r dir; do
+          terraform -chdir="$dir" validate
+        done
+    terraform-trivy:
+      glob: "*.tf"
+      run: |
+        find . -name '*.tf' -not -path './.git/*' -exec dirname {} \; | sort -u | while IFS= read -r dir; do
+          trivy config --exit-code 1 "$dir"
+        done
