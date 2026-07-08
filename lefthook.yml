@@ -17,6 +17,12 @@ pre-push:
         for dir in $(find . -name '*.tf' -exec dirname {} \; | sort -u); do
           terraform -chdir="$dir" validate
         done
+    terraform-trivy:
+      glob: "*.tf"
+      run: |
+        for dir in $(find . -name '*.tf' -exec dirname {} \; | sort -u); do
+          trivy config --exit-code 1 "$dir"
+        done
     actionlint-all:
       glob: ".github/workflows/*.yml"
       run: actionlint
