@@ -1,0 +1,42 @@
+# Example: consumer workflow that calls Forge's Terraform workflow.
+# Place this in your repo at .github/workflows/terraform.yml
+#
+# Prerequisites:
+#   - GitHub environments configured (e.g., dev, staging, prod) with protection
+#     rules to gate apply/destroy jobs behind required reviewers
+#   - AWS IAM configured for GitHub Actions via OIDC
+#     (https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
+#   - Each GitHub environment must have these variables set:
+#       vars.AWS_PLAN_ROLE_ARN   — IAM role ARN for plan/validate (read-only)
+#       vars.AWS_APPLY_ROLE_ARN  — IAM role ARN for apply/destroy (write)
+#   - secrets: inherit passes credentials to the called workflow
+
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - "environments/**"
+      - "modules/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        required: true
+        options:
+          - plan
+          - apply
+          - destroy
+      environment:
+        type: environment
+        required: true
+
+jobs:
+  terraform:
+    uses: crmagz/forge/.github/workflows/terraform.yml@terraform/v1
+    with:
+      action: ${{ github.event_name == 'pull_request' && 'plan' || inputs.action }}
+      environment: ${{ inputs.environment || 'dev' }}
+      working-directory: environments/${{ inputs.environment || 'dev' }}
+    secrets: inherit
