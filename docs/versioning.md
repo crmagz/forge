@@ -10,21 +10,21 @@ Forge uses [Semantic Versioning](https://semver.org/):
 
 ## Version Tags
 
-Each release creates two tags:
+Tags are scoped by toolchain:
 
-1. **Exact version**: `v1.2.3` — immutable, points to a specific commit
-2. **Major version**: `v1` — mutable, updated to point to the latest release in that major version
+1. **Major version**: `terraform/v1` — mutable, updated to point to the latest release in that major
+2. **Exact version**: `terraform/v1.2.3` — immutable, points to a specific commit
 
 Consumers reference the major version tag for automatic minor/patch updates:
 
 ```yaml
-uses: <org>/forge/.github/workflows/terraform-plan.yml@v1
+uses: <org>/forge/.github/workflows/terraform.yml@terraform/v1
 ```
 
 For maximum determinism, consumers can pin to an exact version:
 
 ```yaml
-uses: <org>/forge/.github/workflows/terraform-plan.yml@v1.2.3
+uses: <org>/forge/.github/workflows/terraform.yml@terraform/v1.0.0
 ```
 
 ## Version Pinning Philosophy
@@ -61,12 +61,12 @@ Version updates are intentional, not automatic:
 2. Determine the version bump (major/minor/patch) based on changes since last release
 3. Create and push the version tag:
    ```bash
-   git tag v1.2.3
-   git push origin v1.2.3
+   git tag terraform/v1.0.0
+   git push origin terraform/v1.0.0
    ```
 4. Update the major version tag:
    ```bash
-   git tag -f v1
-   git push -f origin v1
+   git tag -f terraform/v1
+   git push -f origin terraform/v1
    ```
 5. Create a GitHub Release with release notes

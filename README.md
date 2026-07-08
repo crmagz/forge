@@ -16,9 +16,28 @@ Forge is designed around the principle that catching issues earlier is exponenti
 | CI (GitHub Actions) | **10x** | Reusable workflows run full plan, test, and security scans |
 | Production | **100x** | Issues that reach prod cost orders of magnitude more to resolve |
 
+### Architecture: Workflows Orchestrate Taskfiles
+
+Forge separates **what to run** from **how to orchestrate it**:
+
+```
+Developer workstation          GitHub Actions
+┌────────────────────┐        ┌────────────────────────────┐
+│  $ task iac:fmt    │        │  .github/workflows/        │
+│  $ task iac:plan   │──────► │    terraform.yml            │
+│  $ task iac:apply  │  same  │      ├─ task iac:validate  │
+│                    │  tasks  │      ├─ task iac:plan      │
+│  Taskfile.yml      │        │      └─ task iac:apply     │
+└────────────────────┘        └────────────────────────────┘
+```
+
+- **Taskfiles** (`tasks/`) contain the implementation — the actual tool commands
+- **Workflows** (`.github/workflows/`) orchestrate taskfiles with CI concerns: permissions, concurrency, environment gates, job summaries, and PR comments
+- **Developers run the same tasks locally** that CI runs remotely — identical commands, identical behavior
+
 ### Supported Toolchains
 
-- **Terraform** - Format, validate, plan, apply with pinned provider and module versions
+- **Terraform** — Format, validate, Trivy security scan, plan, apply, destroy with pinned provider and module versions
 
 ## Getting Started
 
@@ -29,18 +48,46 @@ Call Forge workflows from your repository:
 ```yaml
 jobs:
   terraform:
-    uses: <org>/forge/.github/workflows/terraform-plan.yml@v1
+    uses: <org>/forge/.github/workflows/terraform.yml@terraform/v1
     with:
-      working-directory: infra/
+      action: ${{ inputs.action }}
+      environment: ${{ inputs.environment }}
+      working-directory: ${{ inputs.working-directory }}
 ```
+
+Terraform and Task versions are managed centrally by Forge — consumers don't specify them.
 
 ### As a Contributor
 
 ```bash
-# Install lefthook for git hooks
-brew install lefthook
+# Install prerequisites
+brew install lefthook go-task terraform
+
+# Install git hooks
 lefthook install
+
+# Run tasks locally
+task iac:fmt TF_DIR=./infra
+task iac:validate TF_DIR=./infra
+task iac:plan TF_DIR=./infra
 ```
+
+## Task Reference
+
+| Task | Description |
+|------|-------------|
+| `task iac:fmt` | Check Terraform formatting |
+| `task iac:fmt-fix` | Fix Terraform formatting |
+| `task iac:validate` | Init (no backend) + validate |
+| `task iac:init` | Initialize with backend |
+| `task iac:plan` | Generate plan |
+| `task iac:plan-destroy` | Generate destroy plan |
+| `task iac:apply` | Apply a saved plan |
+| `task iac:trivy` | Run Trivy IaC security scan |
+| `task iac:test` | Run Terraform tests |
+| `task iac:show` | Show plan in human-readable format |
+
+All tasks accept `TF_DIR` to specify the Terraform root module path.
 
 ## Documentation
 

@@ -27,6 +27,21 @@ The cost of catching an issue increases by an order of magnitude at each stage:
 
 When designing workflows, always ask: "Can this check run earlier?" If a CI check could be a git hook, make it a git hook first and keep it in CI as a safety net.
 
+### Workflows Orchestrate Taskfiles
+
+This is the foundational architectural pattern of Forge. There are two layers:
+
+1. **Taskfiles** (`tasks/`) — the implementation layer. Taskfiles contain the actual tool commands (terraform, lint, build). They are portable, tool-agnostic, and identical whether run locally or in CI.
+2. **Workflows** (`.github/workflows/`) — the orchestration layer. Workflows handle CI-only concerns: permissions, concurrency groups, environment gates, artifact passing, job summaries, and PR comments. They call taskfiles to do the actual work.
+
+**Why this matters:**
+- A developer running `task iac:plan` locally executes the exact same commands as CI
+- Taskfile changes are testable locally before pushing
+- Workflows stay thin — they orchestrate, they don't implement
+- Adding a new check means adding a task first, then wiring it into a workflow
+
+**When adding new functionality, always ask:** "Does this belong in a task or a workflow?" If it's a tool command or validation logic, it's a task. If it's about job ordering, permissions, or CI integration, it's a workflow.
+
 ### Reusable Over Repeatable
 
 Workflows are designed as callable units (`workflow_call`). Consumers pass inputs; Forge handles orchestration. This means:
@@ -39,37 +54,72 @@ Workflows are designed as callable units (`workflow_call`). Consumers pass input
 ```
 forge/
 ├── .github/
-│   └── workflows/          # Reusable GitHub Actions workflows
-├── docs/                   # Detailed documentation
-│   ├── architecture.md     # System design and decisions
-│   ├── terraform.md        # Terraform workflow reference
-│   ├── contributing.md     # Development standards
-│   └── versioning.md       # Release and pinning strategy
-├── scripts/                # Supporting scripts used by workflows
-├── lefthook.yml            # Git hook configuration
-├── CONTEXT.md              # This file — AI context
-└── README.md               # Project overview and quick start
+│   ├── workflows/              # Reusable GitHub Actions workflows
+│   │   └── terraform.yml       # Terraform plan/apply/destroy workflow
+│   ├── pull_request_template.md
+│   └── release_template.md
+├── tasks/                      # Taskfile implementation layer
+│   ├── iac/                    # Infrastructure-as-code tasks (Terraform)
+│   │   └── Taskfile.yml
+│   ├── gitops/                 # GitOps tasks (future)
+│   │   └── Taskfile.yml
+│   └── build/                  # Build tasks (future)
+│       └── Taskfile.yml
+├── docs/                       # Detailed documentation
+│   ├── CONTEXT.md              # This file — AI context
+│   ├── architecture.md         # System design and decisions
+│   ├── terraform.md            # Terraform workflow reference
+│   ├── contributing.md         # Development standards
+│   └── versioning.md           # Release and pinning strategy
+├── Taskfile.yml                # Root taskfile (includes task modules)
+├── lefthook.yml                # Git hook configuration
+└── README.md                   # Project overview and quick start
 ```
+
+### Task Directory Convention
+
+Each task directory (`tasks/<domain>/`) contains a `Taskfile.yml` scoped to that domain. The root `Taskfile.yml` includes all task modules, creating namespaced commands:
+
+```bash
+task iac:plan          # from tasks/iac/Taskfile.yml
+task gitops:sync       # from tasks/gitops/Taskfile.yml (future)
+task build:docker      # from tasks/build/Taskfile.yml (future)
+```
+
+When adding a new task domain:
+1. Create `tasks/<domain>/Taskfile.yml`
+2. Add an include entry in the root `Taskfile.yml`
+3. Wire tasks into relevant workflows
 
 ## Conventions
 
-- **Workflow files**: Kebab-case, prefixed by toolchain (e.g., `terraform-plan.yml`, `terraform-apply.yml`)
-- **Commit messages**: Conventional Commits with JIRA ID in scope — `feat(JIRA-123): add terraform plan workflow`
-- **Branches**: `<type>/<description>` (e.g., `feat/terraform-plan`, `docs/project-foundation`)
+- **Workflow files**: Kebab-case, named by toolchain (e.g., `terraform.yml`)
+- **Task namespaces**: Short lowercase names matching directory (e.g., `iac`, `gitops`, `build`)
+- **Commit messages**: Conventional Commits — `feat: add terraform plan workflow`
+- **Branches**: `<type>/<description>` (e.g., `feat/terraform-workflow`, `docs/project-foundation`)
 - **PRs**: Scoped and atomic — one concern per PR, curated commit history
-- **Versions**: Semver tags (`v1.0.0`), consumers reference major version tags (`@v1`)
+- **Versions**: Semver tags (`v1.0.0`), consumers reference tags like `@terraform/v1`
 
 ## Working in This Repo
 
 ### Adding a New Workflow
 
-1. Create the workflow file in `.github/workflows/`
-2. Define inputs via `workflow_call` with explicit types and descriptions
-3. Pin all action versions to full SHA
-4. Pin all tool versions explicitly
-5. Add corresponding lefthook hooks for local validation
-6. Document in `docs/<toolchain>.md`
-7. Update the README documentation table if adding a new toolchain
+1. Create the task(s) in `tasks/<domain>/Taskfile.yml` — test locally first
+2. Create the workflow in `.github/workflows/` — orchestrate the tasks
+3. Define inputs via `workflow_call` with explicit types and descriptions
+4. Pin all action versions to full SHA
+5. Pin all tool versions explicitly
+6. Add corresponding lefthook hooks for local validation
+7. Document in `docs/<toolchain>.md`
+8. Update the README task reference and documentation tables
+
+### Adding a New Task Domain
+
+1. Create `tasks/<domain>/Taskfile.yml`
+2. Add include in root `Taskfile.yml`
+3. Wire tasks into relevant workflows
+4. Add local hooks in `lefthook.yml`
+5. Document in `docs/<domain>.md`
 
 ### Modifying Existing Workflows
 
@@ -81,8 +131,10 @@ forge/
 ## AI Agent Guidelines
 
 - Do not add `Co-Authored-By` lines to commits
-- Follow the conventional commit format strictly — ask for JIRA ID if not provided
+- Do not include JIRA IDs in commit scopes — this is a personal project
+- Follow the conventional commit format strictly
 - Keep PRs scoped: one logical change per PR
 - Prefer explicit over implicit in all configuration
 - When in doubt about a version, check the latest stable release rather than guessing
 - Never use `latest` as a version for any tool, action, or dependency
+- New tool commands belong in taskfiles; CI concerns belong in workflows
