@@ -1,0 +1,11 @@
+version: "3"
+
+includes:
+  iac:
+    taskfile: ./tasks/iac/Taskfile.yml
+  gitops:
+    taskfile: ./tasks/gitops/Taskfile.yml
+    optional: true
+  build:
+    taskfile: ./tasks/build/Taskfile.yml
+    optional: true
