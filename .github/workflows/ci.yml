@@ -1,0 +1,59 @@
+# Self-check workflow — validates Forge's own workflows and taskfiles.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  TASK_VERSION: "3.52.0"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          version: ${{ env.TASK_VERSION }}
+
+      - name: Validate taskfiles
+        run: task --list-all
+
+      - name: Install actionlint
+        run: |
+          ACTIONLINT_VERSION="1.7.7"
+          curl -sfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar xzf - -C /usr/local/bin actionlint
+
+      - name: Lint workflows
+        run: actionlint
+
+      - name: Validate YAML syntax
+        run: |
+          for f in $(find . -name '*.yml' -not -path './.git/*'); do
+            echo "Checking $f"
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
+          done
+
+      - name: Job summary
+        run: |
+          {
+            echo "## CI Validation"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Taskfile syntax | :white_check_mark: |"
+            echo "| Workflow lint | :white_check_mark: |"
+            echo "| YAML syntax | :white_check_mark: |"
+          } >> "$GITHUB_STEP_SUMMARY"
