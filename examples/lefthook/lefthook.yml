@@ -1,0 +1,15 @@
+# Example: consumer lefthook config that extends Forge's modular hooks.
+# Place this in your repo root.
+#
+# Prerequisites:
+#   - lefthook installed: brew install lefthook
+#   - Run `lefthook install` after cloning
+#   - Forge cloned as a sibling directory, or set FORGE_PATH to its location
+#
+# Pick the configs that match your repo's toolchains.
+# base.yml is always included — it covers conventional commits,
+# merge marker detection, and large file checks.
+
+extends:
+  - "${FORGE_PATH:-../forge}/lefthook/base.yml"
+  - "${FORGE_PATH:-../forge}/lefthook/terraform.yml"
