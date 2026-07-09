@@ -22,6 +22,15 @@ generate_release_notes() {
     return 0
   fi
 
+  # Collect commit hashes that have BREAKING CHANGE footer in their body
+  local breaking_hashes=""
+  while IFS= read -r hash; do
+    body=$(git log -1 --pretty=format:"%b" "$hash" 2>/dev/null || true)
+    if echo "$body" | grep -qE "^BREAKING CHANGE:"; then
+      breaking_hashes="${breaking_hashes} ${hash}"
+    fi
+  done < <(git log "$range" --pretty=format:"%h" 2>/dev/null)
+
   local breaking="" features="" fixes="" performance="" refactors="" builds="" reverts=""
   local docs="" chores="" ci="" styles="" tests="" other=""
 
@@ -39,12 +48,20 @@ generate_release_notes() {
       scope=$(echo "$subject" | sed -E 's/^[a-z]+\(([^)]+)\).*/\1/')
     fi
 
-    local line="* ${description} (${hash}) by @${author}"
+    local line="* ${description} (${hash}) — ${author}"
     if [ -n "$scope" ]; then
-      line="* **${scope}:** ${description} (${hash}) by @${author}"
+      line="* **${scope}:** ${description} (${hash}) — ${author}"
     fi
 
-    if echo "$subject" | grep -qE "^[a-z]+(\(.*\))?!:" || echo "$subject" | grep -qE "^BREAKING CHANGE:"; then
+    # Check for breaking: subject indicator OR body footer
+    local is_breaking="false"
+    if echo "$subject" | grep -qE "^[a-z]+(\(.*\))?!:"; then
+      is_breaking="true"
+    elif echo "$breaking_hashes" | grep -qw "$hash"; then
+      is_breaking="true"
+    fi
+
+    if [ "$is_breaking" = "true" ]; then
       breaking="${breaking}${line}"$'\n'
     elif echo "$subject" | grep -qE "^feat(\(.*\))?:"; then
       features="${features}${line}"$'\n'
@@ -74,7 +91,7 @@ generate_release_notes() {
   done <<< "$commits"
 
   local contributors
-  contributors=$(git log "$range" --pretty=format:"@%an" 2>/dev/null | sort -u | paste -sd ", " -)
+  contributors=$(git log "$range" --pretty=format:"%an" 2>/dev/null | sort -u | paste -sd ", " -)
 
   [ -n "$breaking" ]    && printf "### Breaking Changes\n%s\n" "$breaking"
   [ -n "$features" ]    && printf "### Features\n%s\n" "$features"
