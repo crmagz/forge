@@ -26,6 +26,9 @@ pre-commit:
     actionlint:
       glob: ".github/workflows/*.yml"
       run: actionlint {staged_files}
+    # Detect secrets before they enter git history
+    gitleaks:
+      run: gitleaks protect --staged --verbose
 
 pre-push:
   parallel: true
