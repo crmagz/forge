@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: true
+  commands:
+    java-format:
+      glob: "*.{java,kt}"
+      run: ./gradlew spotlessCheck
+
+pre-push:
+  parallel: true
+  commands:
+    java-test:
+      glob: "*.{java,kt}"
+      run: ./gradlew test
