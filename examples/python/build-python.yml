@@ -1,0 +1,26 @@
+# Example: consumer workflow that calls Forge's Python build pipeline.
+# Place in .github/workflows/ of your repo.
+#
+# Prerequisites:
+#   - GitHub environment (e.g., dev) with AWS OIDC configured
+#   - vars.AWS_BUILD_ROLE_ARN set in the environment
+#   - pyproject.toml with a version field
+#   - uv for dependency management (uv.lock)
+#   - ruff, mypy, pytest as dev dependencies
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    uses: crmagz/forge/.github/workflows/build-python.yml@build/v1
+    with:
+      environment: dev
+      python-version: "3.12"
+      ecr-repository: my-python-app
+      platforms: "linux/arm64"

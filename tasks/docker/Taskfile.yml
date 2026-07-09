@@ -1,0 +1,58 @@
+version: "3"
+
+vars:
+  DOCKERFILE: '{{.DOCKERFILE | default "Dockerfile"}}'
+  CONTEXT: '{{.CONTEXT | default "."}}'
+  PLATFORMS: '{{.PLATFORMS | default "linux/arm64"}}'
+  REGISTRY: '{{.REGISTRY | default ""}}'
+  REPOSITORY: '{{.REPOSITORY}}'
+  TAG: '{{.TAG}}'
+  CACHE_REGISTRY: '{{.CACHE_REGISTRY | default ""}}'
+  BUILD_ARGS: '{{.BUILD_ARGS | default ""}}'
+
+tasks:
+  build-push:
+    desc: Build and push Docker image with Buildx and registry caching
+    requires:
+      vars: [REGISTRY, REPOSITORY, TAG]
+    cmds:
+      - |
+        build_args=""
+        if [ -n "{{.BUILD_ARGS}}" ]; then
+          while IFS= read -r arg; do
+            [ -n "$arg" ] && build_args="$build_args --build-arg $arg"
+          done <<< "{{.BUILD_ARGS}}"
+        fi
+
+        cache_args=""
+        if [ -n "{{.CACHE_REGISTRY}}" ]; then
+          cache_args="--cache-from type=registry,ref={{.CACHE_REGISTRY}} --cache-to type=registry,ref={{.CACHE_REGISTRY}},mode=max"
+        fi
+
+        docker buildx build \
+          --platform {{.PLATFORMS}} \
+          --file {{.DOCKERFILE}} \
+          --tag {{.REGISTRY}}/{{.REPOSITORY}}:{{.TAG}} \
+          $build_args \
+          $cache_args \
+          --push \
+          {{.CONTEXT}}
+
+  build-local:
+    desc: Build Docker image locally (no push)
+    requires:
+      vars: [REPOSITORY, TAG]
+    cmds:
+      - |
+        build_args=""
+        if [ -n "{{.BUILD_ARGS}}" ]; then
+          while IFS= read -r arg; do
+            [ -n "$arg" ] && build_args="$build_args --build-arg $arg"
+          done <<< "{{.BUILD_ARGS}}"
+        fi
+
+        docker build \
+          --file {{.DOCKERFILE}} \
+          --tag {{.REPOSITORY}}:{{.TAG}} \
+          $build_args \
+          {{.CONTEXT}}

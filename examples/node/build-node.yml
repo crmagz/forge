@@ -1,0 +1,25 @@
+# Example: consumer workflow that calls Forge's Node.js build pipeline.
+# Place in .github/workflows/ of your repo.
+#
+# Prerequisites:
+#   - GitHub environment (e.g., dev) with AWS OIDC configured
+#   - vars.AWS_BUILD_ROLE_ARN set in the environment
+#   - package.json with build, lint, typecheck, and test scripts
+#   - package-lock.json for deterministic installs
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    uses: crmagz/forge/.github/workflows/build-node.yml@build/v1
+    with:
+      environment: dev
+      node-version: "22"
+      ecr-repository: my-node-app
+      platforms: "linux/arm64"

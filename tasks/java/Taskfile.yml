@@ -1,0 +1,44 @@
+version: "3"
+
+vars:
+  WORKING_DIR: '{{.WORKING_DIR | default "."}}'
+  VERSION: '{{.VERSION | default "0.0.0"}}'
+  BUILD_TYPE: '{{.BUILD_TYPE | default "dev"}}'
+
+tasks:
+  build:
+    desc: Build with Gradle (skip tests)
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - ./gradlew build -x test
+
+  test:
+    desc: Run tests with Gradle
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - ./gradlew test
+
+  check:
+    desc: Build and test
+    cmds:
+      - task: build
+      - task: test
+
+  inject-version:
+    desc: Inject version into gradle.properties (SNAPSHOT for dev versions)
+    dir: "{{.WORKING_DIR}}"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - |
+        version="{{.VERSION}}"
+        if [ "{{.BUILD_TYPE}}" = "dev" ]; then
+          version="${version}-SNAPSHOT"
+        fi
+        sed -i.bak "s/^version=.*/version=${version}/" gradle.properties && rm -f gradle.properties.bak
+
+  publish:
+    desc: Publish JAR to configured repository
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - ./gradlew publish

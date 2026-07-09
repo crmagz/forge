@@ -1,0 +1,52 @@
+version: "3"
+
+vars:
+  WORKING_DIR: '{{.WORKING_DIR | default "."}}'
+  VERSION: '{{.VERSION | default "0.0.0"}}'
+
+tasks:
+  install:
+    desc: Install Node.js dependencies
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - npm ci
+
+  build:
+    desc: Build the project
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - npm run build
+
+  lint:
+    desc: Run linter
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - npm run lint
+
+  typecheck:
+    desc: Run type checker
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - npm run typecheck
+
+  test:
+    desc: Run tests
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - npm test
+
+  check:
+    desc: Run all checks (build, lint, typecheck, test)
+    cmds:
+      - task: build
+      - task: lint
+      - task: typecheck
+      - task: test
+
+  inject-version:
+    desc: Inject version into package.json
+    dir: "{{.WORKING_DIR}}"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - npm version "{{.VERSION}}" --no-git-tag-version --allow-same-version
