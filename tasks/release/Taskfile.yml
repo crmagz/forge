@@ -1,0 +1,64 @@
+version: "3"
+
+vars:
+  TAG_PREFIX: '{{.TAG_PREFIX | default ""}}'
+  VERSION: '{{.VERSION | default ""}}'
+  PREVIOUS_TAG: '{{.PREVIOUS_TAG | default ""}}'
+  CURRENT_REF: '{{.CURRENT_REF | default "HEAD"}}'
+
+tasks:
+  calculate-version:
+    desc: Calculate next semantic version from git tags and conventional commits
+    cmds:
+      - bash {{.ROOT_DIR}}/.github/actions/semantic-version/calculate-version.sh '{{.TAG_PREFIX}}'
+
+  generate-release-notes:
+    desc: Generate release notes from conventional commits
+    cmds:
+      - bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' '{{.CURRENT_REF}}'
+
+  ensure-tag:
+    desc: Ensure git tag exists on current commit (idempotent — safe to rerun)
+    requires:
+      vars: [VERSION]
+    cmds:
+      - |
+        tag="{{.TAG_PREFIX}}v{{.VERSION}}"
+        current_sha=$(git rev-parse HEAD)
+
+        if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+          tag_sha=$(git rev-list -n 1 "${tag}")
+          if [ "$tag_sha" != "$current_sha" ]; then
+            echo "ERROR: Tag ${tag} already exists on commit ${tag_sha}, but current commit is ${current_sha}."
+            exit 1
+          fi
+          echo "Tag ${tag} already exists on current commit. Continuing."
+        else
+          git tag -a "${tag}" -m "Release ${tag}"
+          git push origin "${tag}"
+          echo "Created and pushed tag ${tag}."
+        fi
+
+  ensure-github-release:
+    desc: Ensure GitHub release exists for the tag (idempotent — safe to rerun)
+    requires:
+      vars: [VERSION]
+    cmds:
+      - |
+        tag="{{.TAG_PREFIX}}v{{.VERSION}}"
+
+        if gh release view "${tag}" >/dev/null 2>&1; then
+          echo "GitHub release ${tag} already exists. Continuing."
+        else
+          notes=$(bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}')
+          gh release create "${tag}" --title "${tag}" --notes "$notes"
+          echo "Created GitHub release ${tag}."
+        fi
+
+  release:
+    desc: Full release — ensure tag and GitHub release exist
+    requires:
+      vars: [VERSION]
+    cmds:
+      - task: ensure-tag
+      - task: ensure-github-release

@@ -1,0 +1,68 @@
+name: Semantic Version
+description: Calculate semantic version from git tags and conventional commits
+
+inputs:
+  tag-prefix:
+    description: "Tag prefix for monorepo scoping (e.g., mypackage/)"
+    default: ""
+
+outputs:
+  version:
+    description: "Calculated semantic version (X.Y.Z)"
+    value: ${{ steps.version.outputs.version }}
+  build-type:
+    description: "Build type: pr, dev, or release"
+    value: ${{ steps.version.outputs.type }}
+  ecr-tag:
+    description: "Docker image tag for ECR"
+    value: ${{ steps.version.outputs.ecr-tag }}
+  previous-tag:
+    description: "Previous git tag (for release notes)"
+    value: ${{ steps.version.outputs.previous-tag }}
+  release-state:
+    description: "Release state: existing (rerun), new, or none"
+    value: ${{ steps.version.outputs.release-state }}
+  release-required:
+    description: "Whether a release is needed (true/false)"
+    value: ${{ steps.version.outputs.release-required }}
+
+runs:
+  using: composite
+  steps:
+    - name: Calculate version
+      id: version
+      shell: bash
+      run: |
+        eval "$(bash ${{ github.action_path }}/calculate-version.sh '${{ inputs.tag-prefix }}')"
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "type=pr" >> "$GITHUB_OUTPUT"
+          echo "ecr-tag=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+          echo "release-required=false" >> "$GITHUB_OUTPUT"
+        elif [ "$SEMVER_RELEASE_STATE" != "none" ]; then
+          echo "type=release" >> "$GITHUB_OUTPUT"
+          echo "ecr-tag=${SEMVER_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release-required=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "type=dev" >> "$GITHUB_OUTPUT"
+          sha=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "ecr-tag=dev-${sha}" >> "$GITHUB_OUTPUT"
+          echo "release-required=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "version=${SEMVER_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "previous-tag=${SEMVER_PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+        echo "release-state=${SEMVER_RELEASE_STATE}" >> "$GITHUB_OUTPUT"
+
+    - name: Version summary
+      shell: bash
+      run: |
+        {
+          echo "## Version"
+          echo ""
+          echo "| Field | Value |"
+          echo "|-------|-------|"
+          echo "| **Version** | \`${{ steps.version.outputs.version }}\` |"
+          echo "| **Build Type** | \`${{ steps.version.outputs.type }}\` |"
+          echo "| **ECR Tag** | \`${{ steps.version.outputs.ecr-tag }}\` |"
+          echo "| **Release State** | \`${{ steps.version.outputs.release-state }}\` |"
+          echo "| **Previous Tag** | \`${{ steps.version.outputs.previous-tag }}\` |"
+        } >> "$GITHUB_STEP_SUMMARY"

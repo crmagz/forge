@@ -1,0 +1,244 @@
+# Reusable Java build workflow — build, test, publish, release.
+# Consumers call this via workflow_call. Build type is determined automatically:
+#   pr      — pull request: validate only, no publish
+#   dev     — push to default branch, no version bump: publish with dev tag
+#   release — push to default branch, version bump detected: publish + tag + release
+#
+# Docker images are pushed to ECR when ecr-repository is provided.
+# JARs are published to CodeArtifact when codeartifact-domain is provided.
+# Expects the consumer repo to use Gradle with a gradle wrapper (./gradlew).
+
+name: Java Build
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: "Path to Java project root"
+        type: string
+        default: "."
+      tag-prefix:
+        description: "Tag prefix for monorepo scoping (e.g., mypackage/)"
+        type: string
+        default: ""
+      java-version:
+        description: "JDK version"
+        type: string
+        default: "21"
+      java-distribution:
+        description: "JDK distribution"
+        type: string
+        default: "temurin"
+      environment:
+        description: "GitHub environment for AWS credentials"
+        type: string
+        required: true
+      ecr-repository:
+        description: "ECR repository name (omit to skip Docker build)"
+        type: string
+        default: ""
+      dockerfile:
+        description: "Path to Dockerfile relative to working-directory"
+        type: string
+        default: "Dockerfile"
+      platforms:
+        description: "Docker target platforms"
+        type: string
+        default: "linux/arm64"
+      build-args:
+        description: "Docker build arguments (newline-separated)"
+        type: string
+        default: ""
+      codeartifact-domain:
+        description: "CodeArtifact domain (omit to skip JAR publish)"
+        type: string
+        default: ""
+      codeartifact-owner:
+        description: "CodeArtifact domain owner (AWS account ID)"
+        type: string
+        default: ""
+      codeartifact-repository:
+        description: "CodeArtifact repository name"
+        type: string
+        default: ""
+
+env:
+  TASK_VERSION: "3.52.0"
+  NO_COLOR: "1"
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: build-java-${{ inputs.environment }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      build-type: ${{ steps.semver.outputs.build-type }}
+      ecr-tag: ${{ steps.semver.outputs.ecr-tag }}
+      previous-tag: ${{ steps.semver.outputs.previous-tag }}
+      release-required: ${{ steps.semver.outputs.release-required }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate version
+        id: semver
+        uses: crmagz/forge/.github/actions/semantic-version@main
+        with:
+          tag-prefix: ${{ inputs.tag-prefix }}
+
+  build:
+    name: Build
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: ${{ inputs.java-distribution }}
+          cache: gradle
+
+      - name: Inject version
+        if: needs.version.outputs.build-type != 'pr'
+        run: |
+          version="${{ needs.version.outputs.version }}"
+          if [ "${{ needs.version.outputs.build-type }}" = "dev" ]; then
+            version="${version}-SNAPSHOT"
+          fi
+          sed -i "s/^version=.*/version=${version}/" gradle.properties
+
+      - name: Build
+        run: ./gradlew build -x test
+
+      - name: Test
+        run: ./gradlew test
+
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "## Java Build"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Version** | \`${{ needs.version.outputs.version }}\` |"
+            echo "| **Build Type** | \`${{ needs.version.outputs.build-type }}\` |"
+            echo "| **JDK** | \`${{ inputs.java-version }} (${{ inputs.java-distribution }})\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish
+    needs: [version, build]
+    if: needs.version.outputs.build-type != 'pr'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        if: inputs.ecr-repository != ''
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        if: inputs.ecr-repository != ''
+        uses: crmagz/forge/.github/actions/docker-build@main
+        with:
+          registry: ${{ steps.ecr-login.outputs.registry }}
+          repository: ${{ inputs.ecr-repository }}
+          tag: ${{ needs.version.outputs.ecr-tag }}
+          tag-latest: ${{ needs.version.outputs.build-type == 'release' && 'true' || 'false' }}
+          dockerfile: ${{ inputs.working-directory }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.working-directory }}
+          platforms: ${{ inputs.platforms }}
+          build-args: ${{ inputs.build-args }}
+          cache-registry: ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr-repository }}:buildcache
+
+      - name: Setup JDK
+        if: inputs.codeartifact-domain != ''
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: ${{ inputs.java-distribution }}
+
+      - name: Configure CodeArtifact for Gradle
+        if: inputs.codeartifact-domain != ''
+        run: |
+          export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token \
+            --domain ${{ inputs.codeartifact-domain }} \
+            --domain-owner ${{ inputs.codeartifact-owner }} \
+            --query authorizationToken --output text)
+          export CODEARTIFACT_URL=$(aws codeartifact get-repository-endpoint \
+            --domain ${{ inputs.codeartifact-domain }} \
+            --domain-owner ${{ inputs.codeartifact-owner }} \
+            --repository ${{ inputs.codeartifact-repository }} \
+            --format maven --query repositoryEndpoint --output text)
+          echo "CODEARTIFACT_AUTH_TOKEN=${CODEARTIFACT_AUTH_TOKEN}" >> "$GITHUB_ENV"
+          echo "CODEARTIFACT_URL=${CODEARTIFACT_URL}" >> "$GITHUB_ENV"
+
+      - name: Publish JAR to CodeArtifact
+        if: inputs.codeartifact-domain != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          version="${{ needs.version.outputs.version }}"
+          if [ "${{ needs.version.outputs.build-type }}" = "dev" ]; then
+            version="${version}-SNAPSHOT"
+          fi
+          sed -i "s/^version=.*/version=${version}/" gradle.properties
+          ./gradlew publish \
+            -PcodeartifactUrl="${CODEARTIFACT_URL}" \
+            -PcodeartifactToken="${CODEARTIFACT_AUTH_TOKEN}"
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## Publish — \`${{ inputs.environment }}\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Version** | \`${{ needs.version.outputs.version }}\` |"
+            echo "| **Build Type** | \`${{ needs.version.outputs.build-type }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Release
+    needs: [version, publish]
+    if: needs.version.outputs.release-required == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create release
+        uses: crmagz/forge/.github/actions/release@main
+        with:
+          version: ${{ needs.version.outputs.version }}
+          tag-prefix: ${{ inputs.tag-prefix }}
+          previous-tag: ${{ needs.version.outputs.previous-tag }}
+          token: ${{ github.token }}

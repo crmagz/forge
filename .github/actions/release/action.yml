@@ -1,0 +1,68 @@
+name: Release
+description: Ensure git tag and GitHub release exist (idempotent — safe to rerun)
+
+inputs:
+  version:
+    description: "Semantic version to release (X.Y.Z)"
+    required: true
+  tag-prefix:
+    description: "Tag prefix (e.g., mypackage/)"
+    default: ""
+  previous-tag:
+    description: "Previous tag for release notes range"
+    default: ""
+  token:
+    description: "GitHub token for creating releases"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Ensure tag
+      shell: bash
+      run: |
+        tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
+        current_sha=$(git rev-parse HEAD)
+
+        if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+          tag_sha=$(git rev-list -n 1 "${tag}")
+          if [ "$tag_sha" != "$current_sha" ]; then
+            echo "::error title=Release tag conflict::Tag ${tag} already exists on commit ${tag_sha}, but current commit is ${current_sha}."
+            exit 1
+          fi
+          echo "Tag ${tag} already exists on current commit. Continuing."
+        else
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+          echo "Created and pushed tag ${tag}."
+        fi
+
+    - name: Ensure GitHub release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
+
+        if gh release view "${tag}" >/dev/null 2>&1; then
+          echo "GitHub release ${tag} already exists. Continuing."
+        else
+          bash ${{ github.action_path }}/generate-release-notes.sh "${{ inputs.previous-tag }}" > release-notes.md
+          gh release create "$tag" --title "$tag" --notes-file release-notes.md
+          echo "Created GitHub release ${tag}."
+        fi
+
+    - name: Release summary
+      shell: bash
+      run: |
+        tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
+        {
+          echo "## Release"
+          echo ""
+          echo "| Field | Value |"
+          echo "|-------|-------|"
+          echo "| **Tag** | \`${tag}\` |"
+          echo "| **Version** | \`${{ inputs.version }}\` |"
+        } >> "$GITHUB_STEP_SUMMARY"

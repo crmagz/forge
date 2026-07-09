@@ -1,7 +1,0 @@
-version: "3"
-
-tasks:
-  default:
-    desc: Build tasks (coming soon)
-    cmds:
-      - echo "No build tasks defined yet"

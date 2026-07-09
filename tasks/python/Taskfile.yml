@@ -1,0 +1,52 @@
+version: "3"
+
+vars:
+  WORKING_DIR: '{{.WORKING_DIR | default "."}}'
+  VERSION: '{{.VERSION | default "0.0.0"}}'
+  BUILD_TYPE: '{{.BUILD_TYPE | default "dev"}}'
+
+tasks:
+  install:
+    desc: Install Python dependencies with uv
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - uv sync
+
+  lint:
+    desc: Run ruff linter
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - uv run ruff check .
+
+  typecheck:
+    desc: Run mypy type checker
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - uv run mypy .
+
+  test:
+    desc: Run pytest
+    dir: "{{.WORKING_DIR}}"
+    cmds:
+      - uv run pytest
+
+  check:
+    desc: Run all checks (lint, typecheck, test)
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test
+
+  inject-version:
+    desc: Inject version into pyproject.toml (PEP 440 for dev versions)
+    dir: "{{.WORKING_DIR}}"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - |
+        version="{{.VERSION}}"
+        if [ "{{.BUILD_TYPE}}" = "dev" ]; then
+          timestamp=$(date -u +%Y%m%d%H%M%S)
+          version="${version}.dev${timestamp}"
+        fi
+        sed -i.bak "s/^version = .*/version = \"${version}\"/" pyproject.toml && rm -f pyproject.toml.bak

@@ -6,6 +6,18 @@ includes:
   gitops:
     taskfile: ./tasks/gitops/Taskfile.yml
     optional: true
-  build:
-    taskfile: ./tasks/build/Taskfile.yml
+  release:
+    taskfile: ./tasks/release/Taskfile.yml
+    optional: true
+  docker:
+    taskfile: ./tasks/docker/Taskfile.yml
+    optional: true
+  python:
+    taskfile: ./tasks/python/Taskfile.yml
+    optional: true
+  node:
+    taskfile: ./tasks/node/Taskfile.yml
+    optional: true
+  java:
+    taskfile: ./tasks/java/Taskfile.yml
     optional: true
