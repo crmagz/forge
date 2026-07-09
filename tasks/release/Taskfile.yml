@@ -26,6 +26,9 @@ tasks:
         tag="{{.TAG_PREFIX}}v{{.VERSION}}"
         current_sha=$(git rev-parse HEAD)
 
+        git config user.name "${GIT_USER_NAME:-github-actions[bot]}"
+        git config user.email "${GIT_USER_EMAIL:-github-actions[bot]@users.noreply.github.com}"
+
         if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
           tag_sha=$(git rev-list -n 1 "${tag}")
           if [ "$tag_sha" != "$current_sha" ]; then
@@ -50,8 +53,8 @@ tasks:
         if gh release view "${tag}" >/dev/null 2>&1; then
           echo "GitHub release ${tag} already exists. Continuing."
         else
-          notes=$(bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}')
-          gh release create "${tag}" --title "${tag}" --notes "$notes"
+          bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' > /tmp/forge-release-notes.md
+          gh release create "${tag}" --title "${tag}" --notes-file /tmp/forge-release-notes.md
           echo "Created GitHub release ${tag}."
         fi
 

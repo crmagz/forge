@@ -33,7 +33,12 @@ runs:
       id: version
       shell: bash
       run: |
-        eval "$(bash ${{ github.action_path }}/calculate-version.sh '${{ inputs.tag-prefix }}')"
+        output=$(bash "${{ github.action_path }}/calculate-version.sh" '${{ inputs.tag-prefix }}')
+        SEMVER_VERSION=$(echo "$output" | grep "^SEMVER_VERSION=" | cut -d= -f2)
+        SEMVER_BUMP=$(echo "$output" | grep "^SEMVER_BUMP=" | cut -d= -f2)
+        SEMVER_PREVIOUS_TAG=$(echo "$output" | grep "^SEMVER_PREVIOUS_TAG=" | cut -d= -f2)
+        SEMVER_RELEASE_STATE=$(echo "$output" | grep "^SEMVER_RELEASE_STATE=" | cut -d= -f2)
+
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           echo "type=pr" >> "$GITHUB_OUTPUT"
           echo "ecr-tag=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"

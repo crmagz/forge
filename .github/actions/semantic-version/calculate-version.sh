@@ -21,8 +21,12 @@ calculate_semantic_version() {
   local release_state="none"
   local tag_pattern
 
-  if [ -n "$tag_prefix" ]; then
-    tag_pattern="^${tag_prefix}v?[0-9]+\.[0-9]+\.[0-9]+$"
+  # Escape regex metacharacters in tag_prefix to prevent pattern injection
+  local escaped_prefix
+  escaped_prefix=$(printf '%s' "$tag_prefix" | sed 's/[.+*?^${}()|[\]\\]/\\&/g')
+
+  if [ -n "$escaped_prefix" ]; then
+    tag_pattern="^${escaped_prefix}v?[0-9]+\.[0-9]+\.[0-9]+$"
   else
     tag_pattern="^v?[0-9]+\.[0-9]+\.[0-9]+$"
   fi
