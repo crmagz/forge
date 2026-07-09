@@ -198,11 +198,11 @@ jobs:
       - name: Login to CodeArtifact
         if: inputs.codeartifact-domain != ''
         run: |
-          export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token \
+          CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token \
             --domain ${{ inputs.codeartifact-domain }} \
             --domain-owner ${{ inputs.codeartifact-owner }} \
             --query authorizationToken --output text)
-          export CODEARTIFACT_URL=$(aws codeartifact get-repository-endpoint \
+          CODEARTIFACT_URL=$(aws codeartifact get-repository-endpoint \
             --domain ${{ inputs.codeartifact-domain }} \
             --domain-owner ${{ inputs.codeartifact-owner }} \
             --repository ${{ inputs.codeartifact-repository }} \
