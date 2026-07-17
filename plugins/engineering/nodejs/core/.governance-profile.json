@@ -1,0 +1,19 @@
+{
+  "id": "engineering-nodejs-core",
+  "tier": "language",
+  "owner": "engineering",
+  "requires": [
+    "engineering-foundation"
+  ],
+  "owns": [
+    "nodejs-module-system",
+    "nodejs-code-style",
+    "nodejs-service-pattern",
+    "nodejs-testing"
+  ],
+  "incompatibleWith": [],
+  "provides": [
+    "nodejs-typescript-standards",
+    "nodejs-add-service"
+  ]
+}

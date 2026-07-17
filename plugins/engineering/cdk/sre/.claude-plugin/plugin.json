@@ -1,0 +1,8 @@
+{
+  "name": "sre-cdk",
+  "description": "SRE-owned AWS CDK infrastructure profile built on the engineering foundation.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Forge"
+  }
+}

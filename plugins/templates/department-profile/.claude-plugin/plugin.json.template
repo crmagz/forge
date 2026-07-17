@@ -1,0 +1,8 @@
+{
+  "name": "department-domain",
+  "description": "Department-owned domain profile built on an approved engineering foundation.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Department Name"
+  }
+}

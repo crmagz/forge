@@ -1,0 +1,8 @@
+{
+  "name": "sre-python-service",
+  "description": "SRE-owned FastAPI service profile built on the shared Python foundation.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Forge"
+  }
+}

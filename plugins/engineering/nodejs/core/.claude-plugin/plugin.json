@@ -1,0 +1,8 @@
+{
+  "name": "engineering-nodejs-core",
+  "description": "Shared Node.js and TypeScript standards for native ESM services.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Forge"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "engineering-foundation",
+  "tier": "foundation",
+  "owner": "engineering",
+  "requires": [],
+  "owns": [
+    "planning",
+    "adjudication",
+    "git-workflow",
+    "session-handoff"
+  ],
+  "incompatibleWith": [],
+  "provides": [
+    "ai-plan",
+    "ai-adjudicate",
+    "git-workflow-standards",
+    "session-handoff"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "forge-engineering",
+  "description": "Hierarchical enterprise governance profiles for Claude Code.",
+  "owner": {
+    "name": "Forge"
+  },
+  "plugins": [
+    {
+      "name": "enterprise-governance",
+      "description": "Resolves repository governance profiles and their required standards.",
+      "source": "./enterprise/governance",
+      "category": "productivity"
+    },
+    {
+      "name": "engineering-foundation",
+      "description": "Shared planning, adjudication, and Git workflow standards.",
+      "source": "./enterprise/foundation",
+      "category": "development"
+    },
+    {
+      "name": "engineering-python-core",
+      "description": "Shared Python language standards for all department profiles.",
+      "source": "./engineering/python/core",
+      "category": "development"
+    },
+    {
+      "name": "engineering-nodejs-core",
+      "description": "Shared Node.js and TypeScript standards for native ESM services.",
+      "source": "./engineering/nodejs/core",
+      "category": "development"
+    },
+    {
+      "name": "sre-python-service",
+      "description": "SRE FastAPI service profile built on the shared Python foundation.",
+      "source": "./engineering/python/sre-service",
+      "category": "development"
+    },
+    {
+      "name": "sre-cdk",
+      "description": "SRE AWS CDK infrastructure profile built on the engineering foundation.",
+      "source": "./engineering/cdk/sre",
+      "category": "development"
+    }
+  ]
+}

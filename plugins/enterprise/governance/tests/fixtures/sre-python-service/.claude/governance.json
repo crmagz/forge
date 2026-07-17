@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "profiles": [
+    "sre-python-service"
+  ],
+  "exceptions": []
+}

@@ -1,0 +1,13 @@
+{
+  "id": "enterprise-governance",
+  "tier": "enterprise",
+  "owner": "enterprise-platform",
+  "requires": [],
+  "owns": [
+    "profile-resolution"
+  ],
+  "incompatibleWith": [],
+  "provides": [
+    "governance-profile-router"
+  ]
+}
