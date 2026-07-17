@@ -10,6 +10,10 @@ const CATALOG_PATH = resolve(
   PLUGIN_ROOT,
   'skills/governance-profile-router/references/governance-catalog.json',
 );
+const APPROVED_EXCEPTIONS_PATH = resolve(
+  PLUGIN_ROOT,
+  'skills/governance-profile-router/references/approved-exceptions.json',
+);
 
 function readJson(filePath) {
   try {
@@ -25,10 +29,24 @@ function assert(condition, message) {
 
 function parseArgs(args) {
   const repositoryIndex = args.indexOf('--repository');
+  const repositoryIdIndex = args.indexOf('--repository-id');
   return {
     repository:
       repositoryIndex === -1 ? undefined : args[repositoryIndex + 1],
+    repositoryId:
+      repositoryIdIndex === -1 ? undefined : args[repositoryIdIndex + 1],
   };
+}
+
+function assertString(value, message) {
+  assert(typeof value === 'string' && value.trim().length > 0, message);
+}
+
+function assertExpiredAtIsFuture(expiresAt, message) {
+  assertString(expiresAt, message);
+  const expiry = Date.parse(expiresAt);
+  assert(Number.isFinite(expiry), message);
+  assert(expiry > Date.now(), message);
 }
 
 function validateCatalog() {
@@ -97,12 +115,41 @@ function validateCatalog() {
   return profiles;
 }
 
-function validateRepository(repository, profiles) {
+function validateApprovedExceptions() {
+  const registry = readJson(APPROVED_EXCEPTIONS_PATH);
+  assert(registry.version === 1, 'Approved exceptions version must be 1.');
+  assert(Array.isArray(registry.exceptions), 'Approved exceptions must be an array.');
+
+  const exceptions = new Map();
+  for (const exception of registry.exceptions) {
+    assertString(exception.id, 'Each approved exception needs an id.');
+    assertString(exception.repository, `Approved exception ${exception.id} needs a repository.`);
+    assertString(exception.rule, `Approved exception ${exception.id} needs a rule.`);
+    assertString(exception.reason, `Approved exception ${exception.id} needs a reason.`);
+    assertString(exception.owner, `Approved exception ${exception.id} needs an owner.`);
+    assertString(exception.approvedBy, `Approved exception ${exception.id} needs an approver.`);
+    assertString(exception.approvalRef, `Approved exception ${exception.id} needs an approval reference.`);
+    assertExpiredAtIsFuture(
+      exception.expiresAt,
+      `Approved exception ${exception.id} needs an unexpired ISO-8601 expiresAt timestamp.`,
+    );
+    assert(!exceptions.has(exception.id), `Duplicate approved exception id: ${exception.id}.`);
+    exceptions.set(exception.id, exception);
+  }
+  return exceptions;
+}
+
+function validateRepository(repository, repositoryId, profiles, approvedExceptions) {
   const configPath = resolve(repository, '.claude/governance.json');
   assert(existsSync(configPath), `Missing repository profile: ${configPath}`);
   const config = readJson(configPath);
+  const allowedKeys = new Set(['version', 'profiles', 'exceptions']);
+  for (const key of Object.keys(config)) {
+    assert(allowedKeys.has(key), `Repository governance does not allow property ${key}.`);
+  }
   assert(config.version === 1, 'Repository governance version must be 1.');
   assert(Array.isArray(config.profiles) && config.profiles.length > 0, 'Repository must select at least one profile.');
+  assert(config.profiles.every(id => typeof id === 'string'), 'Repository profile ids must be strings.');
 
   const selected = new Set(config.profiles);
   assert(selected.size === config.profiles.length, 'Repository profiles must be unique.');
@@ -114,16 +161,24 @@ function validateRepository(repository, profiles) {
       assert(!selected.has(incompatibleProfile), `${id} conflicts with ${incompatibleProfile}.`);
     }
   }
-  for (const exception of config.exceptions ?? []) {
-    assert(exception.rule && exception.reason && exception.owner && exception.expires, 'Exceptions need rule, reason, owner, and expires.');
-    assert(new Date(`${exception.expires}T00:00:00Z`) >= new Date(), `Exception for ${exception.rule} is expired.`);
+  if (config.exceptions !== undefined) {
+    assert(Array.isArray(config.exceptions), 'Repository exceptions must be an array of approved exception ids.');
+    assert(config.exceptions.every(id => typeof id === 'string' && id.length > 0), 'Repository exception ids must be non-empty strings.');
+  }
+  for (const exceptionId of config.exceptions ?? []) {
+    assertString(repositoryId, 'A canonical --repository-id is required when a repository references an exception.');
+    const exception = approvedExceptions.get(exceptionId);
+    assert(exception, `Repository references unknown approved exception ${exceptionId}.`);
+    assert(exception.repository === repositoryId, `Approved exception ${exceptionId} is not authorized for ${repositoryId}.`);
+    assertExpiredAtIsFuture(exception.expiresAt, `Approved exception ${exceptionId} is expired.`);
   }
 }
 
 try {
   const profiles = validateCatalog();
-  const {repository} = parseArgs(process.argv.slice(2));
-  if (repository) validateRepository(repository, profiles);
+  const approvedExceptions = validateApprovedExceptions();
+  const {repository, repositoryId} = parseArgs(process.argv.slice(2));
+  if (repository) validateRepository(repository, repositoryId, profiles, approvedExceptions);
   console.log(repository ? `Governance catalog and ${repository} are valid.` : 'Governance catalog is valid.');
 } catch (error) {
   console.error(`Governance validation failed: ${error.message}`);

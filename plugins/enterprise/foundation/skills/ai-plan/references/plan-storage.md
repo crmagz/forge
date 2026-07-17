@@ -9,8 +9,8 @@ Durable plans are stored outside the target repo:
 Path rules:
 
 - Resolve durable plan paths with
-  `skills/ai-plan/scripts/resolve-plan-path.mjs` when the
-  script is available. Do not hand-build the path.
+  `node "${CLAUDE_SKILL_DIR}/scripts/resolve-plan-path.mjs"` when the script is
+  available. Do not hand-build the path.
 - Use `$AI_PLAN_HOME` as the plan root if it is set.
 - Otherwise use `~/.claude` when running under claude.
 - Otherwise use `~/.cursor` when running under cursor.
@@ -33,7 +33,7 @@ Path rules:
 Example:
 
 ```bash
-node skills/ai-plan/scripts/resolve-plan-path.mjs \
+node "${CLAUDE_SKILL_DIR}/scripts/resolve-plan-path.mjs" \
   --repo-root /path/to/repository \
   --ticket PROJ-1234 \
   --title "Payment retry"

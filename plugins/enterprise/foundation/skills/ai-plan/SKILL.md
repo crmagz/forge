@@ -59,7 +59,9 @@ Durable plans are stored outside the target repo:
 ~/.{claude|cursor}/plans/<baseRepo>/<kebab-case-name>.plan.md
 ```
 
-- Resolve the path with `skills/ai-plan/scripts/resolve-plan-path.mjs`. Do not hand-build the path.
+- Resolve the path with
+  `node "${CLAUDE_SKILL_DIR}/scripts/resolve-plan-path.mjs"`. Do not hand-build
+  the path.
 - Never create repo-local planning files.
 
 For the full path-derivation rules (`$AI_PLAN_HOME`, environment

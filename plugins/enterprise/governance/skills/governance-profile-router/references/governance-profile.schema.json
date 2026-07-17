@@ -23,31 +23,9 @@
     "exceptions": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "rule",
-          "reason",
-          "owner",
-          "expires"
-        ],
-        "properties": {
-          "rule": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1
-          },
-          "owner": {
-            "type": "string",
-            "minLength": 1
-          },
-          "expires": {
-            "type": "string",
-            "format": "date"
-          }
-        }
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
       }
     }
   }

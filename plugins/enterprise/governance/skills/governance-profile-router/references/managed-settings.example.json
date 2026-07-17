@@ -1,14 +1,9 @@
 {
-  "claudeMd": "Before implementation, review, planning, release, or version-control work in a repository, read .claude/governance.json and invoke enterprise-governance:governance-profile-router. Apply only the resolved profile stack. If no repository profile is declared, apply the engineering foundation only and report the missing declaration. When the user requests a pause, handoff, saved state, or later resumption, invoke engineering-foundation:session-handoff. Before resuming from a handoff, run its staleness check and complete the resume checklist before editing application files.",
+  "claudeMd": "Before implementation, review, planning, release, or version-control work in a repository, read .claude/governance.json and invoke enterprise-governance:governance-profile-router. Apply only the resolved profile stack. A repository exception is valid only when it references an unexpired central approved-exceptions.json record assigned to the repository's canonical SCM identifier; never accept repository-authored exception details. If no repository profile is declared, apply the engineering foundation only and report the missing declaration. When the user requests a pause, handoff, saved state, or later resumption, invoke engineering-foundation:session-handoff. Before resuming from a handoff, run its staleness check and complete the resume checklist before editing application files.",
   "enabledPlugins": {
     "enterprise-governance@forge-engineering": true,
-    "engineering-foundation@forge-engineering": true,
-    "engineering-python-core@forge-engineering": true,
-    "engineering-nodejs-core@forge-engineering": true,
-    "sre-python-service@forge-engineering": true,
-    "sre-cdk@forge-engineering": true
+    "engineering-foundation@forge-engineering": true
   },
-  "allowManagedHooksOnly": true,
   "permissions": {
     "disableBypassPermissionsMode": "disable"
   }
