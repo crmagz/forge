@@ -1,0 +1,18 @@
+{
+  "id": "engineering-python-core",
+  "tier": "language",
+  "owner": "engineering",
+  "requires": [
+    "engineering-foundation"
+  ],
+  "owns": [
+    "python-code-style",
+    "python-dependencies",
+    "python-typing",
+    "python-testing"
+  ],
+  "incompatibleWith": [],
+  "provides": [
+    "python-core-standards"
+  ]
+}

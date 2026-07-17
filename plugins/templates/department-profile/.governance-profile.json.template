@@ -1,0 +1,15 @@
+{
+  "id": "department-domain",
+  "tier": "department",
+  "owner": "department-name",
+  "requires": [
+    "engineering-foundation"
+  ],
+  "provides": [
+    "department-domain-standards"
+  ],
+  "owns": [
+    "domain-specific-implementation"
+  ],
+  "incompatibleWith": []
+}

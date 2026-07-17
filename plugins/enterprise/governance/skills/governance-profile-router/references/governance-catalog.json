@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "enterprise-governance",
+      "plugin": "enterprise-governance",
+      "path": "enterprise/governance",
+      "tier": "enterprise"
+    },
+    {
+      "id": "engineering-foundation",
+      "plugin": "engineering-foundation",
+      "path": "enterprise/foundation",
+      "tier": "foundation"
+    },
+    {
+      "id": "engineering-python-core",
+      "plugin": "engineering-python-core",
+      "path": "engineering/python/core",
+      "tier": "language"
+    },
+    {
+      "id": "engineering-nodejs-core",
+      "plugin": "engineering-nodejs-core",
+      "path": "engineering/nodejs/core",
+      "tier": "language"
+    },
+    {
+      "id": "sre-python-service",
+      "plugin": "sre-python-service",
+      "path": "engineering/python/sre-service",
+      "tier": "department"
+    },
+    {
+      "id": "sre-cdk",
+      "plugin": "sre-cdk",
+      "path": "engineering/cdk/sre",
+      "tier": "department"
+    }
+  ]
+}

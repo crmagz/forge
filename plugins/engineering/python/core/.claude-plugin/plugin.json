@@ -1,0 +1,8 @@
+{
+  "name": "engineering-python-core",
+  "description": "Shared Python language standards for all department profiles.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Forge"
+  }
+}

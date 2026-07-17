@@ -1,0 +1,8 @@
+{
+  "name": "engineering-foundation",
+  "description": "Shared engineering workflows for planning, session handoff, adjudication, and safe Git operations.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Forge"
+  }
+}

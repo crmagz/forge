@@ -1,0 +1,8 @@
+{
+  "name": "enterprise-governance",
+  "description": "Resolves repository governance profiles and their required engineering standards.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Forge"
+  }
+}

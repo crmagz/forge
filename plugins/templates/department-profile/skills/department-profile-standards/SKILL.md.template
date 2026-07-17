@@ -1,0 +1,15 @@
+---
+name: department-domain-standards
+description: Apply the department-owned domain profile after its required foundation profiles have been resolved.
+---
+
+# Department Domain Standards
+
+This profile requires the dependencies declared in `.governance-profile.json`.
+Apply them before this profile. Read each owned rule in `references/rules/`
+before changing code in its scope.
+
+Document every parent-rule replacement explicitly, including the reason,
+owner, validation command, and expiration date if it is temporary. Do not
+apply this profile outside a repository that declares it in
+`.claude/governance.json`.

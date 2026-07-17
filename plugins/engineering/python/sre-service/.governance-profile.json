@@ -1,0 +1,19 @@
+{
+  "id": "sre-python-service",
+  "tier": "department",
+  "owner": "sre",
+  "requires": [
+    "engineering-python-core"
+  ],
+  "owns": [
+    "fastapi-service-layout",
+    "fastapi-api-patterns",
+    "pydantic-api-models"
+  ],
+  "incompatibleWith": [],
+  "provides": [
+    "sre-python-service-standards",
+    "python-add-endpoint",
+    "python-add-service"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "sre-cdk",
+  "tier": "department",
+  "owner": "sre",
+  "requires": [
+    "engineering-foundation"
+  ],
+  "owns": [
+    "cdk-infrastructure"
+  ],
+  "incompatibleWith": [],
+  "provides": [
+    "cdk-development-standards"
+  ]
+}
