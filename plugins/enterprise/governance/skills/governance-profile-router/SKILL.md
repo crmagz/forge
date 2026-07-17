@@ -24,8 +24,10 @@ through `references/governance-catalog.json`.
 4. Treat repository-local instructions as the next layer after the declared
    profiles. Escalate conflicting instructions to the profile owner instead of
    silently choosing one.
-5. Read and honor every unexpired exception. An expired exception is invalid
-   and must be renewed or removed before relying on it.
+5. Honor an exception only when `.claude/governance.json` references an ID in
+   the centrally released `approved-exceptions.json` registry, the record is
+   assigned to the repository's canonical SCM identifier, and it is unexpired.
+   Repository-authored exception details are invalid.
 
 ## Current Profile Map
 
