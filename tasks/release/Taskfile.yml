@@ -1,22 +1,12 @@
 version: "3"
 
-vars:
-  TAG_PREFIX: '{{.TAG_PREFIX | default ""}}'
-  PATHS: '{{.PATHS | default ""}}'
-  VERSION: '{{.VERSION | default ""}}'
-  PREVIOUS_TAG: '{{.PREVIOUS_TAG | default ""}}'
-  CURRENT_REF: '{{.CURRENT_REF | default "HEAD"}}'
-
 tasks:
   calculate-version:
     desc: Calculate next semantic version from git tags and conventional commits
     cmds:
       - |
-        pathspecs=()
-        while IFS= read -r pathspec; do
-          [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
-        done <<< '{{.PATHS}}'
-        bash {{.ROOT_DIR}}/.github/actions/semantic-version/calculate-version.sh '{{.TAG_PREFIX}}' "${pathspecs[@]}"
+        mapfile -t pathspecs < <(bash {{.ROOT_DIR}}/.github/actions/semantic-version/parse-pathspecs.sh <<< "${SEMVER_PATHS:-}")
+        bash {{.ROOT_DIR}}/.github/actions/semantic-version/calculate-version.sh "${TAG_PREFIX:-}" "${pathspecs[@]}"
 
   test-semantic-version:
     desc: Run semantic version truth-table tests
@@ -33,24 +23,26 @@ tasks:
     cmds:
       - task: test-semantic-version
       - task: test-release-notes
+      - task: test-workflow-contract
+
+  test-workflow-contract:
+    desc: Verify reusable workflow and composite-action pathscope contracts
+    cmds:
+      - bash {{.ROOT_DIR}}/tests/semantic-version/test-workflow-contract.sh
 
   generate-release-notes:
     desc: Generate release notes from conventional commits
     cmds:
       - |
-        pathspecs=()
-        while IFS= read -r pathspec; do
-          [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
-        done <<< '{{.PATHS}}'
-        bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' '{{.CURRENT_REF}}' "${pathspecs[@]}"
+        mapfile -t pathspecs < <(bash {{.ROOT_DIR}}/.github/actions/semantic-version/parse-pathspecs.sh <<< "${SEMVER_PATHS:-}")
+        bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh "${PREVIOUS_TAG:-}" "${CURRENT_REF:-HEAD}" "${pathspecs[@]}"
 
   ensure-tag:
     desc: Ensure git tag exists on current commit (idempotent — safe to rerun)
-    requires:
-      vars: [VERSION]
     cmds:
       - |
-        tag="{{.TAG_PREFIX}}v{{.VERSION}}"
+        : "${VERSION:?VERSION must be set}"
+        tag="${TAG_PREFIX:-}v${VERSION}"
         current_sha=$(git rev-parse HEAD)
 
         git config user.name "${GIT_USER_NAME:-github-actions[bot]}"
@@ -71,28 +63,22 @@ tasks:
 
   ensure-github-release:
     desc: Ensure GitHub release exists for the tag (idempotent — safe to rerun)
-    requires:
-      vars: [VERSION]
     cmds:
       - |
-        tag="{{.TAG_PREFIX}}v{{.VERSION}}"
+        : "${VERSION:?VERSION must be set}"
+        tag="${TAG_PREFIX:-}v${VERSION}"
 
         if gh release view "${tag}" >/dev/null 2>&1; then
           echo "GitHub release ${tag} already exists. Continuing."
         else
-          pathspecs=()
-          while IFS= read -r pathspec; do
-            [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
-          done <<< '{{.PATHS}}'
-          bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' HEAD "${pathspecs[@]}" > /tmp/forge-release-notes.md
+          mapfile -t pathspecs < <(bash {{.ROOT_DIR}}/.github/actions/semantic-version/parse-pathspecs.sh <<< "${SEMVER_PATHS:-}")
+          bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh "${PREVIOUS_TAG:-}" HEAD "${pathspecs[@]}" > /tmp/forge-release-notes.md
           gh release create "${tag}" --title "${tag}" --notes-file /tmp/forge-release-notes.md
           echo "Created GitHub release ${tag}."
         fi
 
   release:
     desc: Full release — ensure tag and GitHub release exist
-    requires:
-      vars: [VERSION]
     cmds:
       - task: ensure-tag
       - task: ensure-github-release

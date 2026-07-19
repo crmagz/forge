@@ -34,7 +34,7 @@ generate_release_notes() {
   local breaking_hashes=""
   while IFS= read -r hash; do
     body=$(git log -1 --pretty=format:"%b" "$hash" 2>/dev/null || true)
-    if echo "$body" | grep -qE "^BREAKING CHANGE:"; then
+    if echo "$body" | grep -qE "^BREAKING[ -]CHANGE:"; then
       breaking_hashes="${breaking_hashes} ${hash}"
     fi
   done < <(

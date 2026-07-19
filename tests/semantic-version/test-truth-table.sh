@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CALCULATOR="$ROOT_DIR/.github/actions/semantic-version/calculate-version.sh"
+PATHSPEC_PARSER="$ROOT_DIR/.github/actions/semantic-version/parse-pathspecs.sh"
 
 failures=0
 assertions=0
@@ -131,8 +132,8 @@ mask_contains() {
 }
 
 test_all_component_path_masks() {
-  local -a names=(docs chore style test ci fix perf refactor build revert feat breaking-bang breaking-footer)
-  local -a bumps=(none none none none none patch patch patch patch patch minor major major)
+  local -a names=(docs chore style test ci fix perf refactor build revert feat breaking-bang breaking-scoped-bang breaking-footer breaking-hyphen-footer)
+  local -a bumps=(none none none none none patch patch patch patch patch minor major major major major)
   local -a subjects=(
     "docs: change component"
     "chore: change component"
@@ -146,9 +147,11 @@ test_all_component_path_masks() {
     "revert: change component"
     "feat: change component"
     "feat!: change component"
+    "feat(api)!: change component"
+    "feat: change component"
     "feat: change component"
   )
-  local -a bodies=("" "" "" "" "" "" "" "" "" "" "" "" "BREAKING CHANGE: intentional")
+  local -a bodies=("" "" "" "" "" "" "" "" "" "" "" "" "" "BREAKING CHANGE: intentional" "BREAKING-CHANGE: intentional")
   local mask index component expected_bump expected_version case_name
 
   for mask in {1..7}; do
@@ -228,11 +231,28 @@ test_pathspec_is_literal() {
   cleanup_repo
 }
 
+test_composite_pathspec_parser() {
+  local parsed malicious indicator
+  parsed="$(printf 'services/api\n\n  \n.python-version\n' | bash "$PATHSPEC_PARSER")"
+  assert_equals "composite parser ignores blank lines" $'services/api\n.python-version' "$parsed"
+
+  indicator="$(mktemp -d)/should-not-exist"
+  malicious="\$(touch $indicator)"
+  parsed="$(printf '%s\n' "$malicious" | bash "$PATHSPEC_PARSER")"
+  assert_equals "composite parser preserves literal pathspecs" "$malicious" "$parsed"
+  if [[ -e "$indicator" ]]; then
+    fail "composite parser safety: command substitution was evaluated"
+  else
+    assertions=$((assertions + 1))
+  fi
+}
+
 test_all_component_path_masks
 test_shared_path_ownership
 test_mixed_history_precedence
 test_legacy_and_rerun_behavior
 test_pathspec_is_literal
+test_composite_pathspec_parser
 
 if (( failures > 0 )); then
   printf '%d of %d semantic-version assertions failed\n' "$failures" "$assertions" >&2
