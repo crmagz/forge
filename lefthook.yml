@@ -1,3 +1,4 @@
 extends:
   - lefthook/base.yml
   - lefthook/terraform.yml
+  - lefthook/helm.yml

@@ -14,6 +14,7 @@ extends:
   - "${FORGE_PATH:-../forge}/lefthook/base.yml"
   # Uncomment the toolchains your repo uses:
   # - "${FORGE_PATH:-../forge}/lefthook/terraform.yml"
+  # - "${FORGE_PATH:-../forge}/lefthook/helm.yml"
   # - "${FORGE_PATH:-../forge}/lefthook/python.yml"
   # - "${FORGE_PATH:-../forge}/lefthook/node.yml"
   # - "${FORGE_PATH:-../forge}/lefthook/java.yml"

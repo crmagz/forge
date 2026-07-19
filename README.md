@@ -38,6 +38,7 @@ Developer workstation          GitHub Actions
 ### Supported Toolchains
 
 - **Terraform** — Format, validate, Trivy security scan, plan, apply, destroy with pinned provider and module versions
+- **Helm 3** — Strict linting for repository-owned charts, including umbrella charts without independently linting vendored dependencies
 
 ## Getting Started
 
@@ -61,7 +62,7 @@ Terraform and Task versions are managed centrally by Forge — consumers don't s
 
 ```bash
 # Install prerequisites
-brew install lefthook go-task terraform
+brew install helm lefthook go-task terraform
 
 # Install git hooks
 lefthook install
@@ -71,6 +72,20 @@ task iac:fmt TF_DIR=./infra
 task iac:validate TF_DIR=./infra
 task iac:plan TF_DIR=./infra
 ```
+
+### Helm chart hooks
+
+The Helm module checks chart roots below `charts/` on each commit. A chart root
+is a directory containing `Chart.yaml` that is not inside another chart's
+`charts/` directory. This supports umbrella charts: their dependency charts
+remain available to Helm, but are not selected as independent lint targets.
+
+- `helm lint --strict` fails on Helm warnings and errors.
+- YAML comments in repository-owned chart files must use `# ` (or a bare `#`).
+  Helm parses template comments such as `{{/* comment */}}` during linting.
+
+Consumer repositories can opt in by extending `lefthook/helm.yml` and should
+place their chart roots below `charts/`.
 
 ## Task Reference
 
