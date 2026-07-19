@@ -1,0 +1,39 @@
+# Helm 3 chart checks. Chart roots are the Chart.yaml files below charts/ that
+# are not vendored dependencies in another chart's charts/ directory.
+
+pre-commit:
+  parallel: true
+  commands:
+    helm-lint:
+      glob: "charts/**"
+      run: |
+        set -e
+
+        [ -d charts ] || exit 0
+
+        find charts -type f -name Chart.yaml -not -path '*/charts/*/charts/*' -exec sh -c '
+          chart_dir=${1%/Chart.yaml}
+          printf "Linting Helm chart: %s\\n" "$chart_dir"
+          helm lint --strict "$chart_dir"
+        ' sh {} \;
+    helm-comment-style:
+      glob: "charts/**"
+      run: |
+        set -e
+
+        [ -d charts ] || exit 0
+
+        # YAML comments use a single space after # (or # by itself). Helm
+        # parses Go-template comments such as {{/* comment */}} during linting.
+        if find charts -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.tpl' \) -not -path '*/charts/*/charts/*' -exec awk '
+          /^[[:blank:]]*#[^[:blank:]#]/ {
+            printf "%s:%d: YAML comments must use # followed by a space\\n", FILENAME, FNR
+            invalid = 1
+          }
+          END { exit invalid }
+        ' {} +; then
+          exit 0
+        fi
+
+        echo "ERROR: Standardize chart comments before committing."
+        exit 1
