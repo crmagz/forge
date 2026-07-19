@@ -14,12 +14,16 @@ set -o nounset
 
 calculate_semantic_version() {
   local tag_prefix="${1:-}"
+  shift || true
+  local -a pathspecs=("$@")
   local latest_tag
   local current_tag
-  local major minor patch
+  local major minor patch version
   local bump="none"
   local release_state="none"
   local tag_pattern
+  local range
+  local subjects bodies
 
   # Escape regex metacharacters in tag_prefix to prevent pattern injection
   local escaped_prefix
@@ -56,38 +60,49 @@ calculate_semantic_version() {
   latest_tag=$(git tag --merged HEAD --sort=-v:refname | grep -E "$tag_pattern" | head -1 || true)
 
   if [ -z "$latest_tag" ]; then
-    echo "SEMVER_VERSION=0.1.0"
-    echo "SEMVER_BUMP=minor"
-    echo "SEMVER_PREVIOUS_TAG="
-    echo "SEMVER_RELEASE_STATE=new"
-    return 0
+    # Preserve the existing behavior for callers that do not scope history.
+    if [ "${#pathspecs[@]}" -eq 0 ]; then
+      echo "SEMVER_VERSION=0.1.0"
+      echo "SEMVER_BUMP=minor"
+      echo "SEMVER_PREVIOUS_TAG="
+      echo "SEMVER_RELEASE_STATE=new"
+      return 0
+    fi
+
+    version="0.1.0"
+    range="HEAD"
+  else
+    version="${latest_tag#${tag_prefix}}"
+    version="${version#v}"
+
+    if ! echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+      echo "ERROR: tag '${latest_tag}' is not valid semver (expected X.Y.Z or vX.Y.Z)" >&2
+      return 1
+    fi
+
+    major=$(echo "$version" | cut -d. -f1)
+    minor=$(echo "$version" | cut -d. -f2)
+    patch=$(echo "$version" | cut -d. -f3)
+    range="${latest_tag}..HEAD"
   fi
 
-  local version="${latest_tag#${tag_prefix}}"
-  version="${version#v}"
-
-  if ! echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-    echo "ERROR: tag '${latest_tag}' is not valid semver (expected X.Y.Z or vX.Y.Z)" >&2
-    return 1
+  if [ "${#pathspecs[@]}" -eq 0 ]; then
+    subjects=$(git log "$range" --pretty=format:"%s" 2>/dev/null || true)
+    bodies=$(git log "$range" --pretty=format:"%b" 2>/dev/null || true)
+  else
+    subjects=$(git log "$range" --pretty=format:"%s" -- "${pathspecs[@]}" 2>/dev/null || true)
+    bodies=$(git log "$range" --pretty=format:"%b" -- "${pathspecs[@]}" 2>/dev/null || true)
   fi
-
-  major=$(echo "$version" | cut -d. -f1)
-  minor=$(echo "$version" | cut -d. -f2)
-  patch=$(echo "$version" | cut -d. -f3)
-
-  local subjects bodies
-  subjects=$(git log "${latest_tag}..HEAD" --pretty=format:"%s" 2>/dev/null || true)
-  bodies=$(git log "${latest_tag}..HEAD" --pretty=format:"%b" 2>/dev/null || true)
 
   if [ -z "$subjects" ]; then
-    echo "SEMVER_VERSION=${major}.${minor}.${patch}"
+    echo "SEMVER_VERSION=${version}"
     echo "SEMVER_BUMP=none"
     echo "SEMVER_PREVIOUS_TAG=${latest_tag}"
     echo "SEMVER_RELEASE_STATE=none"
     return 0
   fi
 
-  if echo "$bodies" | grep -qE "^BREAKING CHANGE:"; then
+  if echo "$bodies" | grep -qE "^BREAKING[ -]CHANGE:"; then
     bump="major"
   fi
 
@@ -106,27 +121,30 @@ calculate_semantic_version() {
     fi
   done <<< "$subjects"
 
-  case "$bump" in
-    major)
-      major=$((major + 1))
-      minor=0
-      patch=0
-      ;;
-    minor)
-      minor=$((minor + 1))
-      patch=0
-      ;;
-    patch)
-      patch=$((patch + 1))
-      ;;
-    none) ;;
-  esac
+  if [ -n "$latest_tag" ]; then
+    case "$bump" in
+      major)
+        major=$((major + 1))
+        minor=0
+        patch=0
+        ;;
+      minor)
+        minor=$((minor + 1))
+        patch=0
+        ;;
+      patch)
+        patch=$((patch + 1))
+        ;;
+      none) ;;
+    esac
+    version="${major}.${minor}.${patch}"
+  fi
 
   if [ "$bump" != "none" ]; then
     release_state="new"
   fi
 
-  echo "SEMVER_VERSION=${major}.${minor}.${patch}"
+  echo "SEMVER_VERSION=${version}"
   echo "SEMVER_BUMP=${bump}"
   echo "SEMVER_PREVIOUS_TAG=${latest_tag}"
   echo "SEMVER_RELEASE_STATE=${release_state}"

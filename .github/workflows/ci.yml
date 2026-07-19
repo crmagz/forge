@@ -30,6 +30,9 @@ jobs:
       - name: Validate taskfiles
         run: task --list-all
 
+      - name: Test semantic versioning
+        run: task release:test-semantic-version
+
       - name: Install actionlint
         run: |
           ACTIONLINT_VERSION="1.7.7"
