@@ -30,8 +30,8 @@ jobs:
       - name: Validate taskfiles
         run: task --list-all
 
-      - name: Test semantic versioning
-        run: task release:test-semantic-version
+      - name: Test release automation
+        run: task release:test
 
       - name: Install actionlint
         run: |
