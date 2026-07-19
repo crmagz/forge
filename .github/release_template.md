@@ -35,5 +35,5 @@
 ```yaml
 jobs:
   example:
-    uses: <org>/forge/.github/workflows/<workflow>.yml@v$MAJOR
+    uses: <org>/forge/.github/workflows/<workflow>.yml@<release-namespace>/v$MAJOR
 ```

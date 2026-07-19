@@ -107,7 +107,7 @@ jobs:
 
       - name: Calculate version
         id: semver
-        uses: crmagz/forge/.github/actions/semantic-version@main
+        uses: crmagz/forge/.github/actions/semantic-version@releases/v1
         with:
           tag-prefix: ${{ inputs.tag-prefix }}
           pathspecs: ${{ inputs.pathspecs }}
@@ -188,7 +188,7 @@ jobs:
 
       - name: Build and push Docker image
         if: inputs.ecr-repository != ''
-        uses: crmagz/forge/.github/actions/docker-build@main
+        uses: crmagz/forge/.github/actions/docker-build@releases/v1
         with:
           registry: ${{ steps.ecr-login.outputs.registry }}
           repository: ${{ inputs.ecr-repository }}
@@ -254,7 +254,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create release
-        uses: crmagz/forge/.github/actions/release@main
+        uses: crmagz/forge/.github/actions/release@releases/v1
         with:
           version: ${{ needs.version.outputs.version }}
           tag-prefix: ${{ inputs.tag-prefix }}
