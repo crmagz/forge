@@ -10,10 +10,12 @@ Forge uses [Semantic Versioning](https://semver.org/):
 
 ## Version Tags
 
-Tags are scoped by toolchain:
+Tags are scoped by workflow family:
 
 1. **Major version**: `terraform/v1` — mutable, updated to point to the latest release in that major
 2. **Exact version**: `terraform/v1.2.3` — immutable, points to a specific commit
+3. **Build workflow major version**: `releases/v1` — mutable, updated to point to the latest compatible Java, Node.js, and Python build workflow release
+4. **Exact build workflow version**: `releases/v1.2.3` — immutable, points to a specific commit
 
 Consumers reference the major version tag for automatic minor/patch updates:
 
@@ -34,10 +36,13 @@ newline-delimited `pathspecs` input. The same filter is applied to version
 calculation and generated release notes, so independent components can retain
 their own tag histories in one repository.
 
+Consumers can use `releases/v1` to receive compatible build-workflow updates,
+or an exact `releases/v1.0.0` tag to pin one Forge release:
+
 ```yaml
 jobs:
   api:
-    uses: crmagz/forge/.github/workflows/build-python.yml@release/v1
+    uses: crmagz/forge/.github/workflows/build-python.yml@releases/v1
     with:
       working-directory: services/api
       tag-prefix: api/
@@ -92,7 +97,7 @@ Version updates are intentional, not automatic:
 
 1. Ensure all changes are merged to `main`
 2. Determine the version bump (major/minor/patch) based on changes since last release
-3. Create and push the version tag:
+3. Create and push the exact version tag:
    ```bash
    git tag terraform/v1.0.0
    git push origin terraform/v1.0.0
@@ -103,3 +108,6 @@ Version updates are intentional, not automatic:
    git push -f origin terraform/v1
    ```
 5. Create a GitHub Release with release notes
+
+For the Java, Node.js, and Python build workflows, use the same process with
+the `releases/` namespace (for example, `releases/v1.0.0` and `releases/v1`).
