@@ -5,6 +5,9 @@ inputs:
   tag-prefix:
     description: "Tag prefix for monorepo scoping (e.g., mypackage/)"
     default: ""
+  pathspecs:
+    description: "Optional newline-separated Git pathspecs used to scope a component release"
+    default: ""
 
 outputs:
   version:
@@ -32,8 +35,16 @@ runs:
     - name: Calculate version
       id: version
       shell: bash
+      env:
+        SEMVER_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        SEMVER_PATHS: ${{ inputs.pathspecs }}
       run: |
-        output=$(bash "${{ github.action_path }}/calculate-version.sh" '${{ inputs.tag-prefix }}')
+        pathspecs=()
+        while IFS= read -r pathspec; do
+          [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
+        done <<< "$SEMVER_PATHS"
+
+        output=$(bash "${{ github.action_path }}/calculate-version.sh" "$SEMVER_TAG_PREFIX" "${pathspecs[@]}")
         SEMVER_VERSION=$(echo "$output" | grep "^SEMVER_VERSION=" | cut -d= -f2)
         SEMVER_BUMP=$(echo "$output" | grep "^SEMVER_BUMP=" | cut -d= -f2)
         SEMVER_PREVIOUS_TAG=$(echo "$output" | grep "^SEMVER_PREVIOUS_TAG=" | cut -d= -f2)
@@ -59,7 +70,14 @@ runs:
 
     - name: Version summary
       shell: bash
+      env:
+        SEMVER_PATHS: ${{ inputs.pathspecs }}
       run: |
+        pathspec_count=0
+        while IFS= read -r pathspec; do
+          [[ "$pathspec" =~ [^[:space:]] ]] && pathspec_count=$((pathspec_count + 1))
+        done <<< "$SEMVER_PATHS"
+
         {
           echo "## Version"
           echo ""
@@ -70,4 +88,5 @@ runs:
           echo "| **ECR Tag** | \`${{ steps.version.outputs.ecr-tag }}\` |"
           echo "| **Release State** | \`${{ steps.version.outputs.release-state }}\` |"
           echo "| **Previous Tag** | \`${{ steps.version.outputs.previous-tag }}\` |"
+          echo "| **Pathspec Filter** | \`${pathspec_count} path(s)\` |"
         } >> "$GITHUB_STEP_SUMMARY"

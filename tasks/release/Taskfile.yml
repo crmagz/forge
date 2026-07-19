@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   TAG_PREFIX: '{{.TAG_PREFIX | default ""}}'
+  PATHS: '{{.PATHS | default ""}}'
   VERSION: '{{.VERSION | default ""}}'
   PREVIOUS_TAG: '{{.PREVIOUS_TAG | default ""}}'
   CURRENT_REF: '{{.CURRENT_REF | default "HEAD"}}'
@@ -10,7 +11,17 @@ tasks:
   calculate-version:
     desc: Calculate next semantic version from git tags and conventional commits
     cmds:
-      - bash {{.ROOT_DIR}}/.github/actions/semantic-version/calculate-version.sh '{{.TAG_PREFIX}}'
+      - |
+        pathspecs=()
+        while IFS= read -r pathspec; do
+          [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
+        done <<< '{{.PATHS}}'
+        bash {{.ROOT_DIR}}/.github/actions/semantic-version/calculate-version.sh '{{.TAG_PREFIX}}' "${pathspecs[@]}"
+
+  test-semantic-version:
+    desc: Run semantic version truth-table tests
+    cmds:
+      - bash {{.ROOT_DIR}}/tests/semantic-version/test-truth-table.sh
 
   generate-release-notes:
     desc: Generate release notes from conventional commits
