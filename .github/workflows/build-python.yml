@@ -20,6 +20,10 @@ on:
         description: "Tag prefix for monorepo scoping (e.g., mypackage/)"
         type: string
         default: ""
+      pathspecs:
+        description: "Optional newline-separated Git pathspecs used to scope a component release"
+        type: string
+        default: ""
       python-version:
         description: "Python version"
         type: string
@@ -69,7 +73,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: build-python-${{ inputs.environment }}-${{ github.ref }}
+  group: build-python-${{ inputs.environment }}-${{ github.ref }}-${{ inputs.tag-prefix }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -106,6 +110,7 @@ jobs:
         uses: crmagz/forge/.github/actions/semantic-version@main
         with:
           tag-prefix: ${{ inputs.tag-prefix }}
+          pathspecs: ${{ inputs.pathspecs }}
 
   build:
     name: Build
@@ -253,5 +258,6 @@ jobs:
         with:
           version: ${{ needs.version.outputs.version }}
           tag-prefix: ${{ inputs.tag-prefix }}
+          pathspecs: ${{ inputs.pathspecs }}
           previous-tag: ${{ needs.version.outputs.previous-tag }}
           token: ${{ github.token }}

@@ -39,10 +39,7 @@ runs:
         SEMVER_TAG_PREFIX: ${{ inputs.tag-prefix }}
         SEMVER_PATHS: ${{ inputs.pathspecs }}
       run: |
-        pathspecs=()
-        while IFS= read -r pathspec; do
-          [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
-        done <<< "$SEMVER_PATHS"
+        mapfile -t pathspecs < <(bash "${{ github.action_path }}/parse-pathspecs.sh" <<< "$SEMVER_PATHS")
 
         output=$(bash "${{ github.action_path }}/calculate-version.sh" "$SEMVER_TAG_PREFIX" "${pathspecs[@]}")
         SEMVER_VERSION=$(echo "$output" | grep "^SEMVER_VERSION=" | cut -d= -f2)

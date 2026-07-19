@@ -73,10 +73,17 @@ git -C "$TEST_REPO" add services/api/component.txt
 GIT_AUTHOR_NAME="API Author" GIT_AUTHOR_EMAIL="api@example.invalid" \
   git -C "$TEST_REPO" commit -qm "fix(api): correct API behavior"
 
+printf 'api breaking change\n' >> "$TEST_REPO/services/api/component.txt"
+git -C "$TEST_REPO" add services/api/component.txt
+GIT_AUTHOR_NAME="API Author" GIT_AUTHOR_EMAIL="api@example.invalid" \
+  git -C "$TEST_REPO" commit -qm "fix(api): change API contract" -m "BREAKING-CHANGE: API clients must update"
+
 scoped_output="$(cd "$TEST_REPO" && bash "$GENERATOR" api/v1.2.3 HEAD services/api)"
 assert_contains "scoped notes include API feature" "$scoped_output" "add API feature"
 assert_contains "scoped notes include API fix" "$scoped_output" "correct API behavior"
 assert_contains "scoped notes include API contributor" "$scoped_output" "API Author"
+assert_contains "hyphen breaking footer has a breaking section" "$scoped_output" "### Breaking Changes"
+assert_contains "hyphen breaking footer is listed as breaking" "$scoped_output" "change API contract"
 assert_not_contains "scoped notes exclude worker feature" "$scoped_output" "add worker feature"
 assert_not_contains "scoped notes exclude worker contributor" "$scoped_output" "Worker Author"
 

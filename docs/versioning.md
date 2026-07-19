@@ -27,6 +27,39 @@ For maximum determinism, consumers can pin to an exact version:
 uses: <org>/forge/.github/workflows/terraform.yml@terraform/v1.0.0
 ```
 
+## Path-Scoped Monorepo Releases
+
+The reusable Python, Node.js, and Java workflows accept an optional
+newline-delimited `pathspecs` input. The same filter is applied to version
+calculation and generated release notes, so independent components can retain
+their own tag histories in one repository.
+
+```yaml
+jobs:
+  api:
+    uses: crmagz/forge/.github/workflows/build-python.yml@release/v1
+    with:
+      working-directory: services/api
+      tag-prefix: api/
+      pathspecs: |
+        services/api
+        .python-version
+```
+
+Use one pathspec per security, deployment, or versioning boundary. A commit
+touching several component pathsets receives the same Conventional Commit bump
+for every affected component; split the change into separate commits when the
+components need different release semantics. Shared files (such as a runtime
+version file) can intentionally appear in multiple pathsets.
+
+For local checks, provide pathspecs through the environment rather than a Task
+template variable. This keeps path data from being interpreted as shell source:
+
+```bash
+TAG_PREFIX=api/ SEMVER_PATHS=$'services/api\n.python-version' \
+  task release:calculate-version
+```
+
 ## Version Pinning Philosophy
 
 ### Why Pin Everything

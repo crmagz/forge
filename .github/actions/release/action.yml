@@ -23,8 +23,11 @@ runs:
   steps:
     - name: Ensure tag
       shell: bash
+      env:
+        RELEASE_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        RELEASE_VERSION: ${{ inputs.version }}
       run: |
-        tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
+        tag="${RELEASE_TAG_PREFIX}v${RELEASE_VERSION}"
         current_sha=$(git rev-parse HEAD)
 
         if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
@@ -48,8 +51,10 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         RELEASE_PREVIOUS_TAG: ${{ inputs.previous-tag }}
         RELEASE_PATHS: ${{ inputs.pathspecs }}
+        RELEASE_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        RELEASE_VERSION: ${{ inputs.version }}
       run: |
-        tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
+        tag="${RELEASE_TAG_PREFIX}v${RELEASE_VERSION}"
 
         if gh release view "${tag}" >/dev/null 2>&1; then
           echo "GitHub release ${tag} already exists. Continuing."
@@ -66,13 +71,16 @@ runs:
 
     - name: Release summary
       shell: bash
+      env:
+        RELEASE_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        RELEASE_VERSION: ${{ inputs.version }}
       run: |
-        tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
+        tag="${RELEASE_TAG_PREFIX}v${RELEASE_VERSION}"
         {
           echo "## Release"
           echo ""
           echo "| Field | Value |"
           echo "|-------|-------|"
           echo "| **Tag** | \`${tag}\` |"
-          echo "| **Version** | \`${{ inputs.version }}\` |"
+          echo "| **Version** | \`${RELEASE_VERSION}\` |"
         } >> "$GITHUB_STEP_SUMMARY"
