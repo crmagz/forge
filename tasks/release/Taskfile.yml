@@ -23,10 +23,26 @@ tasks:
     cmds:
       - bash {{.ROOT_DIR}}/tests/semantic-version/test-truth-table.sh
 
+  test-release-notes:
+    desc: Run release note path-filter tests
+    cmds:
+      - bash {{.ROOT_DIR}}/tests/semantic-version/test-release-notes.sh
+
+  test:
+    desc: Run all release automation tests
+    cmds:
+      - task: test-semantic-version
+      - task: test-release-notes
+
   generate-release-notes:
     desc: Generate release notes from conventional commits
     cmds:
-      - bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' '{{.CURRENT_REF}}'
+      - |
+        pathspecs=()
+        while IFS= read -r pathspec; do
+          [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
+        done <<< '{{.PATHS}}'
+        bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' '{{.CURRENT_REF}}' "${pathspecs[@]}"
 
   ensure-tag:
     desc: Ensure git tag exists on current commit (idempotent — safe to rerun)
@@ -64,7 +80,11 @@ tasks:
         if gh release view "${tag}" >/dev/null 2>&1; then
           echo "GitHub release ${tag} already exists. Continuing."
         else
-          bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' > /tmp/forge-release-notes.md
+          pathspecs=()
+          while IFS= read -r pathspec; do
+            [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
+          done <<< '{{.PATHS}}'
+          bash {{.ROOT_DIR}}/.github/actions/release/generate-release-notes.sh '{{.PREVIOUS_TAG}}' HEAD "${pathspecs[@]}" > /tmp/forge-release-notes.md
           gh release create "${tag}" --title "${tag}" --notes-file /tmp/forge-release-notes.md
           echo "Created GitHub release ${tag}."
         fi

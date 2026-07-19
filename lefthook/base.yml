@@ -33,8 +33,8 @@ pre-commit:
 pre-push:
   parallel: true
   commands:
-    semantic-version-tests:
-      run: bash tests/semantic-version/test-truth-table.sh
+    release-automation-tests:
+      run: task release:test
     actionlint-all:
       glob: ".github/workflows/*.yml"
       run: actionlint

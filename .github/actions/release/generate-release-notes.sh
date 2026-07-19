@@ -6,6 +6,10 @@ set -o nounset
 generate_release_notes() {
   local previous_tag="${1:-}"
   local current_ref="${2:-HEAD}"
+  local -a pathspecs=()
+  if [ "$#" -gt 2 ]; then
+    pathspecs=("${@:3}")
+  fi
   local range
 
   if [ -z "$previous_tag" ]; then
@@ -15,7 +19,11 @@ generate_release_notes() {
   fi
 
   local commits
-  commits=$(git log "$range" --pretty=format:"%s|%h|%an" 2>/dev/null || true)
+  if [ "${#pathspecs[@]}" -gt 0 ]; then
+    commits=$(git log "$range" --pretty=format:"%s|%h|%an" -- "${pathspecs[@]}" 2>/dev/null || true)
+  else
+    commits=$(git log "$range" --pretty=format:"%s|%h|%an" 2>/dev/null || true)
+  fi
 
   if [ -z "$commits" ]; then
     echo "No changes."
@@ -29,7 +37,13 @@ generate_release_notes() {
     if echo "$body" | grep -qE "^BREAKING CHANGE:"; then
       breaking_hashes="${breaking_hashes} ${hash}"
     fi
-  done < <(git log "$range" --pretty=format:"%h" 2>/dev/null)
+  done < <(
+    if [ "${#pathspecs[@]}" -gt 0 ]; then
+      git log "$range" --pretty=format:"%h" -- "${pathspecs[@]}"
+    else
+      git log "$range" --pretty=format:"%h"
+    fi
+  )
 
   local breaking="" features="" fixes="" performance="" refactors="" builds="" reverts=""
   local docs="" chores="" ci="" styles="" tests="" other=""
@@ -91,7 +105,11 @@ generate_release_notes() {
   done <<< "$commits"
 
   local contributors
-  contributors=$(git log "$range" --pretty=format:"%an" 2>/dev/null | sort -u | paste -sd ", " -)
+  if [ "${#pathspecs[@]}" -gt 0 ]; then
+    contributors=$(git log "$range" --pretty=format:"%an" -- "${pathspecs[@]}" 2>/dev/null | sort -u | paste -sd ", " -)
+  else
+    contributors=$(git log "$range" --pretty=format:"%an" 2>/dev/null | sort -u | paste -sd ", " -)
+  fi
 
   [ -n "$breaking" ]    && printf "### Breaking Changes\n%s\n" "$breaking"
   [ -n "$features" ]    && printf "### Features\n%s\n" "$features"

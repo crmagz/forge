@@ -11,6 +11,9 @@ inputs:
   previous-tag:
     description: "Previous tag for release notes range"
     default: ""
+  pathspecs:
+    description: "Optional newline-separated Git pathspecs used to scope release notes"
+    default: ""
   token:
     description: "GitHub token for creating releases"
     required: true
@@ -43,13 +46,20 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        RELEASE_PREVIOUS_TAG: ${{ inputs.previous-tag }}
+        RELEASE_PATHS: ${{ inputs.pathspecs }}
       run: |
         tag="${{ inputs.tag-prefix }}v${{ inputs.version }}"
 
         if gh release view "${tag}" >/dev/null 2>&1; then
           echo "GitHub release ${tag} already exists. Continuing."
         else
-          bash ${{ github.action_path }}/generate-release-notes.sh "${{ inputs.previous-tag }}" > release-notes.md
+          pathspecs=()
+          while IFS= read -r pathspec; do
+            [[ "$pathspec" =~ [^[:space:]] ]] && pathspecs+=("$pathspec")
+          done <<< "$RELEASE_PATHS"
+
+          bash ${{ github.action_path }}/generate-release-notes.sh "$RELEASE_PREVIOUS_TAG" HEAD "${pathspecs[@]}" > release-notes.md
           gh release create "$tag" --title "$tag" --notes-file release-notes.md
           echo "Created GitHub release ${tag}."
         fi
