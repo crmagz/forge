@@ -164,7 +164,9 @@ jobs:
   publish:
     name: Publish
     needs: [version, build]
-    if: needs.version.outputs.build-type != 'pr'
+    if: >-
+      needs.version.outputs.build-type != 'pr' &&
+      (inputs.ecr-repository != '' || inputs.codeartifact-domain != '')
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
