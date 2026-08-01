@@ -96,6 +96,7 @@ jobs:
       version: ${{ steps.semver.outputs.version }}
       build-type: ${{ steps.semver.outputs.build-type }}
       ecr-tag: ${{ steps.semver.outputs.ecr-tag }}
+      image-tag: ${{ steps.semver.outputs.ecr-tag }}
       previous-tag: ${{ steps.semver.outputs.previous-tag }}
       release-required: ${{ steps.semver.outputs.release-required }}
     steps:
@@ -159,7 +160,7 @@ jobs:
                 echo "ecr-repository must be empty when container-registry is ghcr" >&2
                 exit 1
               fi
-              if [[ ! "$GHCR_REPOSITORY" =~ ^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+$ ]]; then
+              if [[ ! "$GHCR_REPOSITORY" =~ ^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9._-]*$ ]]; then
                 echo "ghcr-repository must be a lowercase owner/image path without ghcr.io" >&2
                 exit 1
               fi
@@ -251,7 +252,7 @@ jobs:
         with:
           registry: ${{ steps.ecr-login.outputs.registry }}
           repository: ${{ inputs.ecr-repository }}
-          tag: ${{ needs.version.outputs.ecr-tag }}
+          tag: ${{ needs.version.outputs.image-tag }}
           tag-latest: ${{ needs.version.outputs.build-type == 'release' && 'true' || 'false' }}
           dockerfile: ${{ inputs.working-directory }}/${{ inputs.dockerfile }}
           context: ${{ inputs.working-directory }}
@@ -265,7 +266,7 @@ jobs:
         with:
           registry: ghcr.io
           repository: ${{ inputs.ghcr-repository }}
-          tag: ${{ needs.version.outputs.ecr-tag }}
+          tag: ${{ needs.version.outputs.image-tag }}
           tag-latest: ${{ needs.version.outputs.build-type == 'release' && 'true' || 'false' }}
           dockerfile: ${{ inputs.working-directory }}/${{ inputs.dockerfile }}
           context: ${{ inputs.working-directory }}
