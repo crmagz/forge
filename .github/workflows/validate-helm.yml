@@ -1,0 +1,59 @@
+name: Helm Chart Validation
+
+on:
+  workflow_call:
+    inputs:
+      chart-directory:
+        description: Path to the chart root containing Chart.yaml.
+        required: true
+        type: string
+      values-files:
+        description: Newline-separated values files used for strict linting and rendering.
+        default: ""
+        type: string
+      kubernetes-version:
+        description: Kubernetes version used while rendering the chart.
+        default: "1.32.0"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Helm 4 chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Helm 4
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v4.2.3
+
+      - name: Verify Helm major version
+        run: |
+          set -euo pipefail
+          version="$(helm version --template '{{ .Version }}')"
+          test "${version#v4.}" != "$version"
+          echo "Using Helm $version"
+
+      - name: Lint and render chart
+        env:
+          CHART_DIRECTORY: ${{ inputs.chart-directory }}
+          VALUES_FILES: ${{ inputs.values-files }}
+          KUBERNETES_VERSION: ${{ inputs.kubernetes-version }}
+        run: |
+          set -euo pipefail
+          test -f "$CHART_DIRECTORY/Chart.yaml"
+
+          values=()
+          while IFS= read -r values_file; do
+            [ -z "$values_file" ] || values+=(--values "$values_file")
+          done <<< "$VALUES_FILES"
+
+          helm lint --strict "$CHART_DIRECTORY" "${values[@]}"
+          helm template chart-validation "$CHART_DIRECTORY" "${values[@]}" \
+            --kube-version "$KUBERNETES_VERSION" > rendered-manifests.yaml
+          kubectl apply --dry-run=client --validate=strict -f rendered-manifests.yaml
