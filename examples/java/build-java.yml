@@ -1,9 +1,8 @@
 # Example: consumer workflow that calls Forge's Java build pipeline.
 # Place in .github/workflows/ of your repo.
 #
-# Prerequisites:
-#   - GitHub environment (e.g., dev) with AWS OIDC configured
-#   - vars.AWS_BUILD_ROLE_ARN set in the environment
+# Prerequisites for GHCR:
+#   - GitHub Actions packages: write permission
 #   - Gradle wrapper (./gradlew) committed to repo
 #   - gradle.properties with a version field
 
@@ -15,12 +14,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
-    uses: crmagz/forge/.github/workflows/build-java.yml@build/v1
+    uses: crmagz/forge/.github/workflows/build-java.yml@releases/v1
     with:
       environment: dev
       java-version: "21"
       java-distribution: temurin
-      ecr-repository: my-java-app
+      container-registry: ghcr
+      ghcr-repository: my-org/my-java-app
       platforms: "linux/arm64"
