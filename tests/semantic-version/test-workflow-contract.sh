@@ -52,6 +52,12 @@ for workflow in build-python.yml build-node.yml build-java.yml; do
   assert_contains "$workflow concurrency is component scoped" "$file" "\${{ inputs.tag-prefix }}"
 done
 
+node_workflow="$ROOT_DIR/.github/workflows/build-node.yml"
+assert_contains \
+  "node workflow skips AWS publish when no publish target is configured" \
+  "$node_workflow" \
+  "(inputs.ecr-repository != '' || inputs.codeartifact-domain != '')"
+
 semantic_action="$ROOT_DIR/.github/actions/semantic-version/action.yml"
 assert_contains "semantic action exposes pathspec input" "$semantic_action" "  pathspecs:"
 assert_contains "semantic action receives pathspec input through env" "$semantic_action" "SEMVER_PATHS: \${{ inputs.pathspecs }}"
