@@ -72,9 +72,10 @@ jobs:
       kubernetes-version: "1.32.0"
 ```
 
-The workflow checks out the matching Forge revision to run its Taskfiles; when
-testing an unreleased Forge change, set `forge-task-ref` to the same branch or
-commit as the reusable workflow reference.
+The workflow checks out the matching Forge revision to run its Taskfiles. By
+default it uses `<caller-owner>/forge`; set `forge-task-repository` for another
+source, and set `forge-task-ref` to the same branch or commit when testing an
+unreleased Forge change.
 
 ### As a Contributor
 

@@ -11,6 +11,10 @@ on:
         description: Forge revision containing the Taskfiles to execute. Keep this aligned with the workflow revision.
         default: releases/v1
         type: string
+      forge-task-repository:
+        description: Repository containing Forge Taskfiles. Defaults to the caller owner's forge repository.
+        default: ""
+        type: string
       values-files:
         description: Newline-separated values files used for strict linting and rendering.
         default: ""
@@ -70,7 +74,7 @@ jobs:
       - name: Checkout Forge Taskfiles
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
-          repository: crmagz/forge
+          repository: ${{ inputs.forge-task-repository || format('{0}/forge', github.repository_owner) }}
           ref: ${{ inputs.forge-task-ref }}
           path: .forge
 
@@ -108,7 +112,7 @@ jobs:
       - name: Checkout Forge Taskfiles
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
-          repository: crmagz/forge
+          repository: ${{ inputs.forge-task-repository || format('{0}/forge', github.repository_owner) }}
           ref: ${{ inputs.forge-task-ref }}
           path: .forge
 
@@ -121,6 +125,22 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: "3.52.0"
+
+      - name: Validate Kind test inputs
+        env:
+          KIND_IMAGE: ${{ inputs.kind-image }}
+          KIND_VALUES_FILES: ${{ inputs.kind-values-files }}
+        run: |
+          task --taskfile .forge/Taskfile.yml helm:kind-inputs \
+            KIND_IMAGE="$KIND_IMAGE" \
+            KIND_VALUES_FILES="$KIND_VALUES_FILES"
+
+      - name: Setup Kind
+        uses: engineerd/setup-kind@dfca6572a7497bbd1bb14e5ad473f8a1ba864ca6 # v0.6.0
+        with:
+          version: v0.24.0
+          skipClusterCreation: true
+          skipClusterDeletion: true
 
       - name: Install and test chart
         env:
