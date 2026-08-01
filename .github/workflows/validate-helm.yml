@@ -15,6 +15,34 @@ on:
         description: Kubernetes version used while rendering the chart.
         default: "1.32.0"
         type: string
+      kind-test:
+        description: Build, install, and helm-test the chart in an ephemeral Kind cluster.
+        default: false
+        type: boolean
+      kind-cluster-name:
+        description: Name for the ephemeral Kind cluster.
+        default: chart-validation
+        type: string
+      kind-image:
+        description: Local image reference to build and load for the Kind test.
+        default: ""
+        type: string
+      kind-dockerfile:
+        description: Dockerfile path used for the Kind test image.
+        default: Dockerfile
+        type: string
+      kind-build-context:
+        description: Docker build context used for the Kind test image.
+        default: .
+        type: string
+      kind-values-files:
+        description: Newline-separated values files used to install the Kind test release.
+        default: ""
+        type: string
+      kind-bootstrap-script:
+        description: Optional trusted shell setup run before install, for example creating a non-secret test dependency.
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -57,3 +85,74 @@ jobs:
           helm template chart-validation "$CHART_DIRECTORY" "${values[@]}" \
             --kube-version "$KUBERNETES_VERSION" > rendered-manifests.yaml
           kubectl apply --dry-run=client --validate=strict -f rendered-manifests.yaml
+
+  kind-test:
+    name: Install and test chart in Kind
+    needs: validate
+    if: inputs.kind-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Helm 4
+        uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
+        with:
+          version: v4.2.3
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          cluster_name: ${{ inputs.kind-cluster-name }}
+
+      - name: Build and load application image
+        env:
+          IMAGE: ${{ inputs.kind-image }}
+          DOCKERFILE: ${{ inputs.kind-dockerfile }}
+          BUILD_CONTEXT: ${{ inputs.kind-build-context }}
+          KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        run: |
+          set -euo pipefail
+          test -n "$IMAGE"
+          docker build --tag "$IMAGE" --file "$DOCKERFILE" "$BUILD_CONTEXT"
+          kind load docker-image --name "$KIND_CLUSTER_NAME" "$IMAGE"
+
+      - name: Bootstrap chart dependencies
+        if: inputs.kind-bootstrap-script != ''
+        env:
+          KIND_BOOTSTRAP_SCRIPT: ${{ inputs.kind-bootstrap-script }}
+          KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        run: |
+          set -euo pipefail
+          kubectl config use-context "kind-$KIND_CLUSTER_NAME"
+          kubectl create namespace chart-validation --dry-run=client -o yaml | kubectl apply -f -
+          bash -eo pipefail -c "$KIND_BOOTSTRAP_SCRIPT"
+
+      - name: Install and test chart
+        env:
+          CHART_DIRECTORY: ${{ inputs.chart-directory }}
+          VALUES_FILES: ${{ inputs.kind-values-files }}
+          KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        run: |
+          set -euo pipefail
+          test -n "$VALUES_FILES"
+
+          values=()
+          while IFS= read -r values_file; do
+            [ -z "$values_file" ] || values+=(--values "$values_file")
+          done <<< "$VALUES_FILES"
+
+          helm upgrade --install chart-validation "$CHART_DIRECTORY" "${values[@]}" \
+            --kube-context "kind-$KIND_CLUSTER_NAME" \
+            --namespace chart-validation --create-namespace \
+            --server-side=true --rollback-on-failure --wait --timeout 5m
+          helm test chart-validation --kube-context "kind-$KIND_CLUSTER_NAME" \
+            --namespace chart-validation --timeout 2m
+
+      - name: Collect failure diagnostics
+        if: failure()
+        env:
+          KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        run: |
+          kubectl --context "kind-$KIND_CLUSTER_NAME" --namespace chart-validation get all,events || true
+          kubectl --context "kind-$KIND_CLUSTER_NAME" --namespace chart-validation logs --all-containers --prefix --tail=200 --selector app.kubernetes.io/instance=chart-validation || true
