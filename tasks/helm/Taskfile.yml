@@ -27,6 +27,10 @@ tasks:
           echo "KIND_IMAGE and KIND_VALUES_FILES are required for helm:kind-test" >&2
           exit 2
         fi
+        if [ -n "{{.KIND_TEST_SECRET_NAME}}" ] && { [ -z "{{.KIND_TEST_SECRET_KEY}}" ] || [ -z "{{.KIND_TEST_SECRET_VALUE}}" ]; }; then
+          echo "KIND_TEST_SECRET_KEY and KIND_TEST_SECRET_VALUE are required when KIND_TEST_SECRET_NAME is set" >&2
+          exit 2
+        fi
 
   check:
     desc: Strictly lint, render, and client-validate a Helm 4 chart
@@ -84,8 +88,10 @@ tasks:
             | kubectl --context "$context" apply -f -
 
           if [ -n "{{.KIND_TEST_SECRET_NAME}}" ]; then
-            test -n "{{.KIND_TEST_SECRET_KEY}}"
-            test -n "{{.KIND_TEST_SECRET_VALUE}}"
+            if [ -z "{{.KIND_TEST_SECRET_KEY}}" ] || [ -z "{{.KIND_TEST_SECRET_VALUE}}" ]; then
+              echo "KIND_TEST_SECRET_KEY and KIND_TEST_SECRET_VALUE are required when KIND_TEST_SECRET_NAME is set" >&2
+              exit 2
+            fi
             kubectl --context "$context" --namespace "{{.KIND_NAMESPACE}}" create secret generic "{{.KIND_TEST_SECRET_NAME}}" \
               --from-literal="{{.KIND_TEST_SECRET_KEY}}={{.KIND_TEST_SECRET_VALUE}}" \
               --dry-run=client -o yaml | kubectl --context "$context" apply -f -

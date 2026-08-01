@@ -84,7 +84,7 @@ jobs:
           version: v4.2.3
 
       - name: Setup Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           version: "3.52.0"
 
@@ -122,7 +122,7 @@ jobs:
           version: v4.2.3
 
       - name: Setup Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           version: "3.52.0"
 
@@ -130,10 +130,16 @@ jobs:
         env:
           KIND_IMAGE: ${{ inputs.kind-image }}
           KIND_VALUES_FILES: ${{ inputs.kind-values-files }}
+          KIND_TEST_SECRET_NAME: ${{ inputs.kind-test-secret-name }}
+          KIND_TEST_SECRET_KEY: ${{ inputs.kind-test-secret-key }}
+          KIND_TEST_SECRET_VALUE: ${{ inputs.kind-test-secret-value }}
         run: |
           task --taskfile .forge/Taskfile.yml helm:kind-inputs \
             KIND_IMAGE="$KIND_IMAGE" \
-            KIND_VALUES_FILES="$KIND_VALUES_FILES"
+            KIND_VALUES_FILES="$KIND_VALUES_FILES" \
+            KIND_TEST_SECRET_NAME="$KIND_TEST_SECRET_NAME" \
+            KIND_TEST_SECRET_KEY="$KIND_TEST_SECRET_KEY" \
+            KIND_TEST_SECRET_VALUE="$KIND_TEST_SECRET_VALUE"
 
       - name: Setup Kind
         uses: engineerd/setup-kind@dfca6572a7497bbd1bb14e5ad473f8a1ba864ca6 # v0.6.0
