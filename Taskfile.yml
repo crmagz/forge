@@ -12,6 +12,9 @@ includes:
   docker:
     taskfile: ./tasks/docker/Taskfile.yml
     optional: true
+  helm:
+    taskfile: ./tasks/helm/Taskfile.yml
+    optional: true
   python:
     taskfile: ./tasks/python/Taskfile.yml
     optional: true

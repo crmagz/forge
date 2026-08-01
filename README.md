@@ -38,7 +38,7 @@ Developer workstation          GitHub Actions
 ### Supported Toolchains
 
 - **Terraform** — Format, validate, Trivy security scan, plan, apply, destroy with pinned provider and module versions
-- **Helm 3** — Strict linting for repository-owned charts, including umbrella charts without independently linting vendored dependencies
+- **Helm 4** — Strict linting, rendering, Kubernetes schema validation, and optional Kind install tests for repository-owned charts
 
 ## Getting Started
 
@@ -72,6 +72,10 @@ jobs:
       kubernetes-version: "1.32.0"
 ```
 
+The workflow checks out the matching Forge revision to run its Taskfiles; when
+testing an unreleased Forge change, set `forge-task-ref` to the same branch or
+commit as the reusable workflow reference.
+
 ### As a Contributor
 
 ```bash
@@ -85,6 +89,11 @@ lefthook install
 task iac:fmt TF_DIR=./infra
 task iac:validate TF_DIR=./infra
 task iac:plan TF_DIR=./infra
+
+# Helm 4 chart validation (run from the chart repository)
+task --taskfile /path/to/forge/Taskfile.yml helm:check \
+  WORKING_DIRECTORY="$PWD" CHART_DIRECTORY=chart \
+  VALUES_FILES=$'chart/values.yaml\nchart/values-validation.yaml'
 ```
 
 ### Helm chart hooks
@@ -101,9 +110,11 @@ remain available to Helm, but are not selected as independent lint targets.
 Consumer repositories can opt in by extending `lefthook/helm.yml` and should
 place their chart roots below `charts/`.
 
-For CI, use the `validate-helm.yml` callable workflow. It installs the pinned
-Helm 4 version, runs strict linting, renders for the requested Kubernetes
-version, and performs strict client-side Kubernetes schema validation.
+For CI, use the `validate-helm.yml` callable workflow. It provisions the
+runner and invokes the same `helm:*` tasks that developers run locally. The
+tasks install no infrastructure outside an explicitly requested local Kind
+cluster, run strict linting, render for the requested Kubernetes version, and
+perform strict client-side Kubernetes schema validation.
 
 ## Task Reference
 
@@ -119,6 +130,9 @@ version, and performs strict client-side Kubernetes schema validation.
 | `task iac:trivy` | Run Trivy IaC security scan |
 | `task iac:test` | Run Terraform tests |
 | `task iac:show` | Show plan in human-readable format |
+| `task helm:check` | Strictly lint, render, and client-validate a Helm 4 chart |
+| `task helm:kind-test` | Build, install, and Helm-test a chart in Kind |
+| `task helm:kind-diagnostics` | Collect diagnostics from a Kind chart test |
 
 All tasks accept `TF_DIR` to specify the Terraform root module path.
 
