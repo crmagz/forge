@@ -45,6 +45,36 @@ assert_occurrences() {
   fi
 }
 
+assert_text_contains() {
+  local description="$1"
+  local value="$2"
+  local expected="$3"
+  assertions=$((assertions + 1))
+  if [[ "$value" != *"$expected"* ]]; then
+    fail "$description: expected '$expected'"
+  fi
+}
+
+assert_text_not_contains() {
+  local description="$1"
+  local value="$2"
+  local unexpected="$3"
+  assertions=$((assertions + 1))
+  if [[ "$value" == *"$unexpected"* ]]; then
+    fail "$description: did not expect '$unexpected'"
+  fi
+}
+
+extract_job() {
+  local file="$1"
+  local job="$2"
+  awk -v job="$job" '
+    $0 == "  " job ":" { capture=1 }
+    capture && $0 ~ /^  [a-z0-9-]+:$/ && $0 != "  " job ":" { exit }
+    capture { print }
+  ' "$file"
+}
+
 extract_registry_validator() {
   awk '
     /^          case "\$CONTAINER_REGISTRY" in$/ { capture=1 }
@@ -100,8 +130,8 @@ for workflow in build-python.yml build-node.yml build-java.yml; do
   assert_contains "$workflow rejects unknown registry providers" "$file" "container-registry must be one of: ecr, ghcr, none"
   assert_contains "$workflow validates GHCR repository format" "$file" "ghcr-repository must be a lowercase owner/image path without ghcr.io"
   assert_contains "$workflow rejects a registry-prefixed GHCR repository" "$file" "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9._-]*$"
-  assert_contains "$workflow scopes package publishing permission to the publish job" "$file" "    permissions:"
-  assert_contains "$workflow grants package publishing permission" "$file" "      packages: write"
+  assert_contains "$workflow defines an AWS publishing job" "$file" "  publish-aws:"
+  assert_contains "$workflow defines a GHCR publishing job" "$file" "  publish-ghcr:"
   assert_contains "$workflow scopes build jobs to read-only contents" "$file" "  contents: read"
   assert_contains "$workflow scopes release jobs to write contents" "$file" "      contents: write"
   assert_contains "$workflow scopes pull request write to release jobs" "$file" "      pull-requests: write"
@@ -112,6 +142,17 @@ for workflow in build-python.yml build-node.yml build-java.yml; do
   assert_contains "$workflow pins semantic version action" "$file" "semantic-version@d9687aa7da986d3431f10e67b22a14f92bb95b5d"
   assert_contains "$workflow pins Docker build action" "$file" "docker-build@082ea3a719a03854e5c2f29f89df76587489ba1f"
   assert_contains "$workflow pins release action" "$file" "actions/release@d9687aa7da986d3431f10e67b22a14f92bb95b5d"
+
+  publish_aws_job="$(extract_job "$file" "publish-aws")"
+  publish_ghcr_job="$(extract_job "$file" "publish-ghcr")"
+  release_job="$(extract_job "$file" "release")"
+  assert_text_contains "$workflow AWS publishing requests OIDC" "$publish_aws_job" "id-token: write"
+  assert_text_not_contains "$workflow AWS publishing does not request package write" "$publish_aws_job" "packages: write"
+  assert_text_contains "$workflow GHCR publishing requests package write" "$publish_ghcr_job" "packages: write"
+  assert_text_not_contains "$workflow GHCR publishing does not request OIDC" "$publish_ghcr_job" "id-token: write"
+  assert_text_contains "$workflow releases after both publishing paths" "$release_job" "needs: [version, build, publish-aws, publish-ghcr]"
+  assert_text_contains "$workflow release handles skipped publishing paths" "$release_job" "always() &&"
+  assert_text_contains "$workflow release requires a successful build" "$release_job" "needs.build.result == 'success'"
 
   workflow_registry_validator="$(extract_registry_validator "$file")"
   assertions=$((assertions + 1))
