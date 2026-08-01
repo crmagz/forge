@@ -9,7 +9,7 @@ on:
         type: string
       forge-task-ref:
         description: Forge revision containing the Taskfiles to execute. Keep this aligned with the workflow revision.
-        default: releases/v1
+        default: helm/v1
         type: string
       forge-task-repository:
         description: Repository containing Forge Taskfiles. Defaults to the caller owner's forge repository.
