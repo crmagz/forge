@@ -1,0 +1,108 @@
+version: "3"
+
+vars:
+  HELM_BIN: '{{.HELM_BIN | default "helm"}}'
+  WORKING_DIRECTORY: '{{.WORKING_DIRECTORY | default "."}}'
+  CHART_DIRECTORY: '{{.CHART_DIRECTORY | default "."}}'
+  VALUES_FILES: '{{.VALUES_FILES | default ""}}'
+  KUBERNETES_VERSION: '{{.KUBERNETES_VERSION | default "1.32.0"}}'
+  KIND_CLUSTER_NAME: '{{.KIND_CLUSTER_NAME | default "chart-validation"}}'
+  KIND_NAMESPACE: '{{.KIND_NAMESPACE | default "chart-validation"}}'
+  KIND_RELEASE_NAME: '{{.KIND_RELEASE_NAME | default "chart-validation"}}'
+  KIND_IMAGE: '{{.KIND_IMAGE | default ""}}'
+  KIND_DOCKERFILE: '{{.KIND_DOCKERFILE | default "Dockerfile"}}'
+  KIND_BUILD_CONTEXT: '{{.KIND_BUILD_CONTEXT | default "."}}'
+  KIND_VALUES_FILES: '{{.KIND_VALUES_FILES | default ""}}'
+  KIND_TEST_SECRET_NAME: '{{.KIND_TEST_SECRET_NAME | default ""}}'
+  KIND_TEST_SECRET_KEY: '{{.KIND_TEST_SECRET_KEY | default ""}}'
+  KIND_TEST_SECRET_VALUE: '{{.KIND_TEST_SECRET_VALUE | default ""}}'
+
+tasks:
+  check:
+    desc: Strictly lint, render, and client-validate a Helm 4 chart
+    cmds:
+      - cmd: |
+          set -eu
+          cd "{{.WORKING_DIRECTORY}}"
+          command -v "{{.HELM_BIN}}" >/dev/null
+          command -v kubectl >/dev/null
+          test -f "{{.CHART_DIRECTORY}}/Chart.yaml"
+
+          helm_version="$("{{.HELM_BIN}}" version --template '{{`{{ .Version }}`}}')"
+          case "$helm_version" in v4.*) ;; *) echo "Helm 4 is required; found $helm_version" >&2; exit 1;; esac
+
+          values_list="$(mktemp)"
+          manifest="$(mktemp)"
+          trap 'unlink "$values_list"; unlink "$manifest"' EXIT
+          printf '%s\n' "{{.VALUES_FILES}}" > "$values_list"
+          set --
+          while IFS= read -r values_file; do
+            [ -z "$values_file" ] || set -- "$@" --values "$values_file"
+          done < "$values_list"
+
+          "{{.HELM_BIN}}" lint --strict "{{.CHART_DIRECTORY}}" "$@"
+          "{{.HELM_BIN}}" template chart-validation "{{.CHART_DIRECTORY}}" "$@" \
+            --kube-version "{{.KUBERNETES_VERSION}}" > "$manifest"
+          kubectl apply --dry-run=client --validate=strict -f "$manifest"
+
+  kind-test:
+    desc: Build, install, and Helm-test a chart in a local Kind cluster
+    requires:
+      vars: [KIND_IMAGE, KIND_VALUES_FILES]
+    cmds:
+      - cmd: |
+          set -eu
+          cd "{{.WORKING_DIRECTORY}}"
+          command -v kind >/dev/null
+          command -v docker >/dev/null
+          command -v kubectl >/dev/null
+          command -v "{{.HELM_BIN}}" >/dev/null
+          test -f "{{.CHART_DIRECTORY}}/Chart.yaml"
+
+          helm_version="$("{{.HELM_BIN}}" version --template '{{`{{ .Version }}`}}')"
+          case "$helm_version" in v4.*) ;; *) echo "Helm 4 is required; found $helm_version" >&2; exit 1;; esac
+
+          clusters="$(kind get clusters)"
+          if ! printf '%s\n' "$clusters" | grep -Fxq "{{.KIND_CLUSTER_NAME}}"; then
+            kind create cluster --name "{{.KIND_CLUSTER_NAME}}"
+          fi
+
+          docker build --tag "{{.KIND_IMAGE}}" --file "{{.KIND_DOCKERFILE}}" "{{.KIND_BUILD_CONTEXT}}"
+          kind load docker-image --name "{{.KIND_CLUSTER_NAME}}" "{{.KIND_IMAGE}}"
+
+          context="kind-{{.KIND_CLUSTER_NAME}}"
+          kubectl --context "$context" create namespace "{{.KIND_NAMESPACE}}" --dry-run=client -o yaml \
+            | kubectl --context "$context" apply -f -
+
+          if [ -n "{{.KIND_TEST_SECRET_NAME}}" ]; then
+            test -n "{{.KIND_TEST_SECRET_KEY}}"
+            test -n "{{.KIND_TEST_SECRET_VALUE}}"
+            kubectl --context "$context" --namespace "{{.KIND_NAMESPACE}}" create secret generic "{{.KIND_TEST_SECRET_NAME}}" \
+              --from-literal="{{.KIND_TEST_SECRET_KEY}}={{.KIND_TEST_SECRET_VALUE}}" \
+              --dry-run=client -o yaml | kubectl --context "$context" apply -f -
+          fi
+
+          values_list="$(mktemp)"
+          trap 'unlink "$values_list"' EXIT
+          printf '%s\n' "{{.KIND_VALUES_FILES}}" > "$values_list"
+          set --
+          while IFS= read -r values_file; do
+            [ -z "$values_file" ] || set -- "$@" --values "$values_file"
+          done < "$values_list"
+
+          "{{.HELM_BIN}}" upgrade --install "{{.KIND_RELEASE_NAME}}" "{{.CHART_DIRECTORY}}" "$@" \
+            --kube-context "$context" --namespace "{{.KIND_NAMESPACE}}" --create-namespace \
+            --server-side=true --rollback-on-failure --wait --timeout 5m
+          "{{.HELM_BIN}}" test "{{.KIND_RELEASE_NAME}}" --kube-context "$context" \
+            --namespace "{{.KIND_NAMESPACE}}" --timeout 2m
+
+  kind-diagnostics:
+    desc: Collect release diagnostics from a Kind chart-validation cluster
+    cmds:
+      - cmd: |
+          cd "{{.WORKING_DIRECTORY}}"
+          context="kind-{{.KIND_CLUSTER_NAME}}"
+          kubectl --context "$context" --namespace "{{.KIND_NAMESPACE}}" get all,events || true
+          kubectl --context "$context" --namespace "{{.KIND_NAMESPACE}}" logs \
+            --all-containers --prefix --tail=200 \
+            --selector app.kubernetes.io/instance={{.KIND_RELEASE_NAME}} || true

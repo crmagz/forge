@@ -7,6 +7,10 @@ on:
         description: Path to the chart root containing Chart.yaml.
         required: true
         type: string
+      forge-task-ref:
+        description: Forge revision containing the Taskfiles to execute. Keep this aligned with the workflow revision.
+        default: releases/v1
+        type: string
       values-files:
         description: Newline-separated values files used for strict linting and rendering.
         default: ""
@@ -39,8 +43,16 @@ on:
         description: Newline-separated values files used to install the Kind test release.
         default: ""
         type: string
-      kind-bootstrap-script:
-        description: Optional trusted shell setup run before install, for example creating a non-secret test dependency.
+      kind-test-secret-name:
+        description: Optional name of a non-sensitive test dependency secret to create before installation.
+        default: ""
+        type: string
+      kind-test-secret-key:
+        description: Key for the optional test dependency secret.
+        default: ""
+        type: string
+      kind-test-secret-value:
+        description: Non-sensitive value for the optional test dependency secret.
         default: ""
         type: string
 
@@ -55,36 +67,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
+      - name: Checkout Forge Taskfiles
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          repository: crmagz/forge
+          ref: ${{ inputs.forge-task-ref }}
+          path: .forge
+
       - name: Setup Helm 4
         uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
         with:
           version: v4.2.3
 
-      - name: Verify Helm major version
-        run: |
-          set -euo pipefail
-          version="$(helm version --template '{{ .Version }}')"
-          test "${version#v4.}" != "$version"
-          echo "Using Helm $version"
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+        with:
+          version: "3.52.0"
 
-      - name: Lint and render chart
+      - name: Validate chart
         env:
           CHART_DIRECTORY: ${{ inputs.chart-directory }}
           VALUES_FILES: ${{ inputs.values-files }}
           KUBERNETES_VERSION: ${{ inputs.kubernetes-version }}
         run: |
-          set -euo pipefail
-          test -f "$CHART_DIRECTORY/Chart.yaml"
-
-          values=()
-          while IFS= read -r values_file; do
-            [ -z "$values_file" ] || values+=(--values "$values_file")
-          done <<< "$VALUES_FILES"
-
-          helm lint --strict "$CHART_DIRECTORY" "${values[@]}"
-          helm template chart-validation "$CHART_DIRECTORY" "${values[@]}" \
-            --kube-version "$KUBERNETES_VERSION" > rendered-manifests.yaml
-          kubectl apply --dry-run=client --validate=strict -f rendered-manifests.yaml
+          task --taskfile .forge/Taskfile.yml helm:check \
+            WORKING_DIRECTORY="$GITHUB_WORKSPACE" \
+            CHART_DIRECTORY="$CHART_DIRECTORY" \
+            VALUES_FILES="$VALUES_FILES" \
+            KUBERNETES_VERSION="$KUBERNETES_VERSION"
 
   kind-test:
     name: Install and test chart in Kind
@@ -95,64 +105,52 @@ jobs:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
+      - name: Checkout Forge Taskfiles
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          repository: crmagz/forge
+          ref: ${{ inputs.forge-task-ref }}
+          path: .forge
+
       - name: Setup Helm 4
         uses: azure/setup-helm@bf6a7d304bc2fdb57e0331155b7ebf2c504acf0a # v4
         with:
           version: v4.2.3
 
-      - name: Create Kind cluster
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+      - name: Setup Task
+        uses: arduino/setup-task@v2
         with:
-          cluster_name: ${{ inputs.kind-cluster-name }}
-
-      - name: Build and load application image
-        env:
-          IMAGE: ${{ inputs.kind-image }}
-          DOCKERFILE: ${{ inputs.kind-dockerfile }}
-          BUILD_CONTEXT: ${{ inputs.kind-build-context }}
-          KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
-        run: |
-          set -euo pipefail
-          test -n "$IMAGE"
-          docker build --tag "$IMAGE" --file "$DOCKERFILE" "$BUILD_CONTEXT"
-          kind load docker-image --name "$KIND_CLUSTER_NAME" "$IMAGE"
-
-      - name: Bootstrap chart dependencies
-        if: inputs.kind-bootstrap-script != ''
-        env:
-          KIND_BOOTSTRAP_SCRIPT: ${{ inputs.kind-bootstrap-script }}
-          KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
-        run: |
-          set -euo pipefail
-          kubectl config use-context "kind-$KIND_CLUSTER_NAME"
-          kubectl create namespace chart-validation --dry-run=client -o yaml | kubectl apply -f -
-          bash -eo pipefail -c "$KIND_BOOTSTRAP_SCRIPT"
+          version: "3.52.0"
 
       - name: Install and test chart
         env:
           CHART_DIRECTORY: ${{ inputs.chart-directory }}
-          VALUES_FILES: ${{ inputs.kind-values-files }}
           KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+          KIND_IMAGE: ${{ inputs.kind-image }}
+          KIND_DOCKERFILE: ${{ inputs.kind-dockerfile }}
+          KIND_BUILD_CONTEXT: ${{ inputs.kind-build-context }}
+          KIND_VALUES_FILES: ${{ inputs.kind-values-files }}
+          KIND_TEST_SECRET_NAME: ${{ inputs.kind-test-secret-name }}
+          KIND_TEST_SECRET_KEY: ${{ inputs.kind-test-secret-key }}
+          KIND_TEST_SECRET_VALUE: ${{ inputs.kind-test-secret-value }}
         run: |
-          set -euo pipefail
-          test -n "$VALUES_FILES"
-
-          values=()
-          while IFS= read -r values_file; do
-            [ -z "$values_file" ] || values+=(--values "$values_file")
-          done <<< "$VALUES_FILES"
-
-          helm upgrade --install chart-validation "$CHART_DIRECTORY" "${values[@]}" \
-            --kube-context "kind-$KIND_CLUSTER_NAME" \
-            --namespace chart-validation --create-namespace \
-            --server-side=true --rollback-on-failure --wait --timeout 5m
-          helm test chart-validation --kube-context "kind-$KIND_CLUSTER_NAME" \
-            --namespace chart-validation --timeout 2m
+          task --taskfile .forge/Taskfile.yml helm:kind-test \
+            WORKING_DIRECTORY="$GITHUB_WORKSPACE" \
+            CHART_DIRECTORY="$CHART_DIRECTORY" \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
+            KIND_IMAGE="$KIND_IMAGE" \
+            KIND_DOCKERFILE="$KIND_DOCKERFILE" \
+            KIND_BUILD_CONTEXT="$KIND_BUILD_CONTEXT" \
+            KIND_VALUES_FILES="$KIND_VALUES_FILES" \
+            KIND_TEST_SECRET_NAME="$KIND_TEST_SECRET_NAME" \
+            KIND_TEST_SECRET_KEY="$KIND_TEST_SECRET_KEY" \
+            KIND_TEST_SECRET_VALUE="$KIND_TEST_SECRET_VALUE"
 
       - name: Collect failure diagnostics
         if: failure()
         env:
           KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
         run: |
-          kubectl --context "kind-$KIND_CLUSTER_NAME" --namespace chart-validation get all,events || true
-          kubectl --context "kind-$KIND_CLUSTER_NAME" --namespace chart-validation logs --all-containers --prefix --tail=200 --selector app.kubernetes.io/instance=chart-validation || true
+          task --taskfile .forge/Taskfile.yml helm:kind-diagnostics \
+            WORKING_DIRECTORY="$GITHUB_WORKSPACE" \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
