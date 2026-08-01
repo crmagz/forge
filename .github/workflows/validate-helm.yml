@@ -66,6 +66,8 @@ permissions:
 env:
   KUBECONFORM_VERSION: "0.8.0"
   KUBECONFORM_LINUX_AMD64_SHA256: "9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883"
+  KIND_VERSION: "0.24.0"
+  KIND_LINUX_AMD64_SHA256: "b89aada5a39d620da3fcd16435b7f28d858927dd53f92cbac77686b0588b600d"
 
 jobs:
   validate:
@@ -159,11 +161,17 @@ jobs:
             KIND_TEST_SECRET_VALUE="$KIND_TEST_SECRET_VALUE"
 
       - name: Setup Kind
-        uses: engineerd/setup-kind@dfca6572a7497bbd1bb14e5ad473f8a1ba864ca6 # v0.6.0
-        with:
-          version: v0.24.0
-          skipClusterCreation: true
-          skipClusterDeletion: true
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/kind"
+          binary="$tool_dir/kind"
+          mkdir -p "$tool_dir"
+          curl --fail --location --silent --show-error \
+            "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64" \
+            --output "$binary"
+          echo "${KIND_LINUX_AMD64_SHA256}  ${binary}" | sha256sum --check --status
+          chmod 0755 "$binary"
+          echo "$tool_dir" >> "$GITHUB_PATH"
 
       - name: Install and test chart
         env:
