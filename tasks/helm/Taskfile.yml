@@ -18,6 +18,16 @@ vars:
   KIND_TEST_SECRET_VALUE: '{{.KIND_TEST_SECRET_VALUE | default ""}}'
 
 tasks:
+  kind-inputs:
+    desc: Validate inputs required for a Kind chart test
+    cmds:
+      - |
+        set -eu
+        if [ -z "{{.KIND_IMAGE}}" ] || [ -z "{{.KIND_VALUES_FILES}}" ]; then
+          echo "KIND_IMAGE and KIND_VALUES_FILES are required for helm:kind-test" >&2
+          exit 2
+        fi
+
   check:
     desc: Strictly lint, render, and client-validate a Helm 4 chart
     cmds:
@@ -33,7 +43,7 @@ tasks:
 
           values_list="$(mktemp)"
           manifest="$(mktemp)"
-          trap 'unlink "$values_list"; unlink "$manifest"' EXIT
+          trap 'rm -f "$values_list" "$manifest" || true' EXIT
           printf '%s\n' "{{.VALUES_FILES}}" > "$values_list"
           set --
           while IFS= read -r values_file; do
@@ -47,8 +57,7 @@ tasks:
 
   kind-test:
     desc: Build, install, and Helm-test a chart in a local Kind cluster
-    requires:
-      vars: [KIND_IMAGE, KIND_VALUES_FILES]
+    deps: [kind-inputs]
     cmds:
       - cmd: |
           set -eu
@@ -83,7 +92,7 @@ tasks:
           fi
 
           values_list="$(mktemp)"
-          trap 'unlink "$values_list"' EXIT
+          trap 'rm -f "$values_list" || true' EXIT
           printf '%s\n' "{{.KIND_VALUES_FILES}}" > "$values_list"
           set --
           while IFS= read -r values_file; do

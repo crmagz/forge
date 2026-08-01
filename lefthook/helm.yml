@@ -11,6 +11,9 @@ pre-commit:
 
         [ -d charts ] || exit 0
 
+        version="$(helm version --template '{{ .Version }}')"
+        case "$version" in v4.*) ;; *) echo "Helm 4 is required; found $version" >&2; exit 1;; esac
+
         find charts -type f -name Chart.yaml -not -path '*/charts/*/charts/*' -exec sh -c '
           chart_dir=${1%/Chart.yaml}
           printf "Linting Helm chart: %s\\n" "$chart_dir"
