@@ -111,3 +111,16 @@ Version updates are intentional, not automatic:
 
 For the Java, Node.js, and Python build workflows, use the same process with
 the `releases/` namespace (for example, `releases/v1.0.0` and `releases/v1`).
+
+## Container Registry Publishing
+
+The language build workflows publish an image to one provider per invocation.
+The backwards-compatible default is ECR: existing callers can continue to set
+`ecr-repository`. To publish to GHCR, select `container-registry: ghcr`, set a
+lowercase `ghcr-repository` in `owner/image` form (without `ghcr.io/`), and
+grant the calling workflow `packages: write`. Forge authenticates to GHCR with
+the ephemeral `GITHUB_TOKEN`; do not supply a personal access token.
+
+Set `container-registry: none` when the workflow should validate and release a
+package without building an image. A workflow rejects mixed ECR/GHCR inputs so
+an image cannot be published to an unintended registry.

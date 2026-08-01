@@ -10,10 +10,12 @@ Shows how a consumer repo uses Forge's Java semantic build workflow.
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `environment` | yes | — | GitHub environment with AWS OIDC |
+| `environment` | yes | — | GitHub environment for protection rules and publish credentials |
 | `java-version` | no | `21` | JDK version |
 | `java-distribution` | no | `temurin` | JDK distribution |
-| `ecr-repository` | no | — | ECR repo name (omit to skip Docker) |
+| `container-registry` | no | `ecr` | `ecr`, `ghcr`, or `none` |
+| `ecr-repository` | no | — | ECR repo name; required to publish with `ecr` |
+| `ghcr-repository` | no | — | Lowercase `owner/image` path; required to publish with `ghcr` |
 | `dockerfile` | no | `Dockerfile` | Dockerfile path relative to working-directory |
 | `platforms` | no | `linux/arm64` | Docker target platforms |
 | `tag-prefix` | no | — | Monorepo tag prefix (e.g., `mypackage/`) |
@@ -39,7 +41,7 @@ Shows how a consumer repo uses Forge's Java semantic build workflow.
 ├── gradlew.bat
 ├── gradle/
 │   └── wrapper/
-├── Dockerfile              # Required if ecr-repository is set
+├── Dockerfile              # Required when an image registry is configured
 └── src/
     ├── main/
     └── test/
@@ -53,3 +55,12 @@ When `codeartifact-domain` is set, the workflow runs `./gradlew publish` with:
 - `-PcodeartifactToken` — auth token
 
 Configure your `build.gradle` to use these properties in the `publishing` block.
+
+## Container Registries
+
+ECR remains the default for existing callers: set `ecr-repository` and grant
+`id-token: write` for the environment’s AWS role. To publish to GHCR instead,
+set `container-registry: ghcr`, provide `ghcr-repository: owner/image`, and
+grant the caller `packages: write`. GHCR uses the ephemeral `GITHUB_TOKEN`; do
+not provide a personal access token. `container-registry: none` disables image
+publication.

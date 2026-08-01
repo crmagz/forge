@@ -4,7 +4,7 @@
 #   dev     — push to default branch, no version bump: publish with dev tag
 #   release — push to default branch, version bump detected: publish + tag + release
 #
-# Docker images are pushed to ECR when ecr-repository is provided.
+# Docker images are pushed to the selected container registry when configured.
 # Python packages are published to CodeArtifact when codeartifact-domain is provided.
 #
 name: Python Build
@@ -29,11 +29,19 @@ on:
         type: string
         default: "3.12"
       environment:
-        description: "GitHub environment for AWS credentials"
+        description: "GitHub environment for deployment credentials and protection rules"
         type: string
         required: true
+      container-registry:
+        description: "Container registry provider: ecr, ghcr, or none"
+        type: string
+        default: "ecr"
       ecr-repository:
-        description: "ECR repository name (omit to skip Docker build)"
+        description: "ECR repository name (omit to skip image publishing with the ecr provider)"
+        type: string
+        default: ""
+      ghcr-repository:
+        description: "GHCR repository path without ghcr.io (for example, owner/image)"
         type: string
         default: ""
       dockerfile:
@@ -107,7 +115,7 @@ jobs:
 
       - name: Calculate version
         id: semver
-        uses: crmagz/forge/.github/actions/semantic-version@releases/v1
+        uses: crmagz/forge/.github/actions/semantic-version@d9687aa7da986d3431f10e67b22a14f92bb95b5d
         with:
           tag-prefix: ${{ inputs.tag-prefix }}
           pathspecs: ${{ inputs.pathspecs }}
@@ -122,6 +130,45 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate container publishing configuration
+        env:
+          CONTAINER_REGISTRY: ${{ inputs.container-registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr-repository }}
+          GHCR_REPOSITORY: ${{ inputs.ghcr-repository }}
+        run: |
+          case "$CONTAINER_REGISTRY" in
+            ecr)
+              if [ -n "$GHCR_REPOSITORY" ]; then
+                echo "ghcr-repository requires container-registry: ghcr" >&2
+                exit 1
+              fi
+              ;;
+            ghcr)
+              if [ -z "$GHCR_REPOSITORY" ]; then
+                echo "ghcr-repository is required when container-registry is ghcr" >&2
+                exit 1
+              fi
+              if [ -n "$ECR_REPOSITORY" ]; then
+                echo "ecr-repository must be empty when container-registry is ghcr" >&2
+                exit 1
+              fi
+              if [[ ! "$GHCR_REPOSITORY" =~ ^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)+$ ]]; then
+                echo "ghcr-repository must be a lowercase owner/image path without ghcr.io" >&2
+                exit 1
+              fi
+              ;;
+            none)
+              if [ -n "$ECR_REPOSITORY" ] || [ -n "$GHCR_REPOSITORY" ]; then
+                echo "ecr-repository and ghcr-repository must be empty when container-registry is none" >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "container-registry must be one of: ecr, ghcr, none" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
@@ -171,11 +218,16 @@ jobs:
     if: needs.version.outputs.build-type != 'pr'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
+        if: (inputs.container-registry == 'ecr' && inputs.ecr-repository != '') || inputs.codeartifact-domain != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_BUILD_ROLE_ARN }}
@@ -186,9 +238,17 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
+      - name: Login to GHCR
+        if: inputs.container-registry == 'ghcr'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push ECR image
         if: inputs.ecr-repository != ''
-        uses: crmagz/forge/.github/actions/docker-build@releases/v1
+        uses: crmagz/forge/.github/actions/docker-build@082ea3a719a03854e5c2f29f89df76587489ba1f
         with:
           registry: ${{ steps.ecr-login.outputs.registry }}
           repository: ${{ inputs.ecr-repository }}
@@ -199,6 +259,20 @@ jobs:
           platforms: ${{ inputs.platforms }}
           build-args: ${{ inputs.build-args }}
           cache-registry: ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr-repository }}:buildcache
+
+      - name: Build and push GHCR image
+        if: inputs.container-registry == 'ghcr'
+        uses: crmagz/forge/.github/actions/docker-build@082ea3a719a03854e5c2f29f89df76587489ba1f
+        with:
+          registry: ghcr.io
+          repository: ${{ inputs.ghcr-repository }}
+          tag: ${{ needs.version.outputs.ecr-tag }}
+          tag-latest: ${{ needs.version.outputs.build-type == 'release' && 'true' || 'false' }}
+          dockerfile: ${{ inputs.working-directory }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.working-directory }}
+          platforms: ${{ inputs.platforms }}
+          build-args: ${{ inputs.build-args }}
+          cache-registry: ghcr.io/${{ inputs.ghcr-repository }}:buildcache
 
       - name: Setup uv
         if: inputs.codeartifact-domain != ''
@@ -240,6 +314,7 @@ jobs:
             echo "|-------|-------|"
             echo "| **Version** | \`${{ needs.version.outputs.version }}\` |"
             echo "| **Build Type** | \`${{ needs.version.outputs.build-type }}\` |"
+            echo "| **Container Registry** | \`${{ inputs.container-registry }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
@@ -254,7 +329,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create release
-        uses: crmagz/forge/.github/actions/release@releases/v1
+        uses: crmagz/forge/.github/actions/release@d9687aa7da986d3431f10e67b22a14f92bb95b5d
         with:
           version: ${{ needs.version.outputs.version }}
           tag-prefix: ${{ inputs.tag-prefix }}
