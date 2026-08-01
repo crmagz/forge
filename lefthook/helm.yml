@@ -1,4 +1,4 @@
-# Helm 3 chart checks. Chart roots are the Chart.yaml files below charts/ that
+# Helm 4 chart checks. Chart roots are the Chart.yaml files below charts/ that
 # are not vendored dependencies in another chart's charts/ directory.
 
 pre-commit:

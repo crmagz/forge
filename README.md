@@ -58,6 +58,20 @@ jobs:
 
 Terraform and Task versions are managed centrally by Forge — consumers don't specify them.
 
+Validate a Helm chart with the centrally pinned Helm 4 toolchain:
+
+```yaml
+jobs:
+  helm:
+    uses: <org>/forge/.github/workflows/validate-helm.yml@releases/v1
+    with:
+      chart-directory: chart
+      values-files: |-
+        chart/values.yaml
+        chart/values-validation.yaml
+      kubernetes-version: "1.32.0"
+```
+
 ### As a Contributor
 
 ```bash
@@ -86,6 +100,10 @@ remain available to Helm, but are not selected as independent lint targets.
 
 Consumer repositories can opt in by extending `lefthook/helm.yml` and should
 place their chart roots below `charts/`.
+
+For CI, use the `validate-helm.yml` callable workflow. It installs the pinned
+Helm 4 version, runs strict linting, renders for the requested Kubernetes
+version, and performs strict client-side Kubernetes schema validation.
 
 ## Task Reference
 
