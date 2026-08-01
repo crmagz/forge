@@ -63,7 +63,7 @@ Validate a Helm chart with the centrally pinned Helm 4 toolchain:
 ```yaml
 jobs:
   helm:
-    uses: <org>/forge/.github/workflows/validate-helm.yml@releases/v1
+    uses: <org>/forge/.github/workflows/validate-helm.yml@helm/v1
     with:
       chart-directory: chart
       values-files: |-
@@ -72,10 +72,10 @@ jobs:
       kubernetes-version: "1.32.0"
 ```
 
-The workflow checks out the matching Forge revision to run its Taskfiles. By
-default it uses `<caller-owner>/forge`; set `forge-task-repository` for another
-source, and set `forge-task-ref` to the same branch or commit when testing an
-unreleased Forge change.
+The workflow checks out the matching Helm-family Taskfiles (`helm/v1`) to run
+them. By default it uses `<caller-owner>/forge`; set `forge-task-repository`
+for another source, and set `forge-task-ref` to the same branch or commit when
+testing an unreleased Forge change.
 
 ### As a Contributor
 
