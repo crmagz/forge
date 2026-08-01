@@ -80,9 +80,7 @@ env:
   NO_COLOR: "1"
 
 permissions:
-  id-token: write
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: build-java-${{ inputs.environment }}-${{ github.ref }}-${{ inputs.tag-prefix }}
@@ -92,6 +90,8 @@ jobs:
   version:
     name: Version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.semver.outputs.version }}
       build-type: ${{ steps.semver.outputs.build-type }}
@@ -128,6 +128,8 @@ jobs:
     name: Build
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -323,6 +325,9 @@ jobs:
     needs: [version, publish]
     if: needs.version.outputs.release-required == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
