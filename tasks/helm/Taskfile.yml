@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   HELM_BIN: '{{.HELM_BIN | default "helm"}}'
+  KUBECONFORM_BIN: '{{.KUBECONFORM_BIN | default "kubeconform"}}'
   WORKING_DIRECTORY: '{{.WORKING_DIRECTORY | default "."}}'
   CHART_DIRECTORY: '{{.CHART_DIRECTORY | default "."}}'
   VALUES_FILES: '{{.VALUES_FILES | default ""}}'
@@ -39,15 +40,16 @@ tasks:
           set -eu
           cd "{{.WORKING_DIRECTORY}}"
           command -v "{{.HELM_BIN}}" >/dev/null
-          command -v kubectl >/dev/null
+          command -v "{{.KUBECONFORM_BIN}}" >/dev/null
           test -f "{{.CHART_DIRECTORY}}/Chart.yaml"
 
           helm_version="$("{{.HELM_BIN}}" version --template '{{`{{ .Version }}`}}')"
           case "$helm_version" in v4.*) ;; *) echo "Helm 4 is required; found $helm_version" >&2; exit 1;; esac
 
           values_list="$(mktemp)"
-          manifest="$(mktemp)"
-          trap 'rm -f "$values_list" "$manifest" || true' EXIT
+          manifest_dir="$(mktemp -d)"
+          manifest="$manifest_dir/rendered.yaml"
+          trap 'rm -f "$values_list"; rm -rf "$manifest_dir" || true' EXIT
           printf '%s\n' "{{.VALUES_FILES}}" > "$values_list"
           set --
           while IFS= read -r values_file; do
@@ -57,7 +59,8 @@ tasks:
           "{{.HELM_BIN}}" lint --strict "{{.CHART_DIRECTORY}}" "$@"
           "{{.HELM_BIN}}" template chart-validation "{{.CHART_DIRECTORY}}" "$@" \
             --kube-version "{{.KUBERNETES_VERSION}}" > "$manifest"
-          kubectl apply --dry-run=client --validate=strict -f "$manifest"
+          "{{.KUBECONFORM_BIN}}" -strict -summary \
+            -kubernetes-version "{{.KUBERNETES_VERSION}}" "$manifest"
 
   kind-test:
     desc: Build, install, and Helm-test a chart in a local Kind cluster

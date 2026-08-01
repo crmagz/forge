@@ -81,7 +81,7 @@ unreleased Forge change.
 
 ```bash
 # Install prerequisites
-brew install helm lefthook go-task terraform
+brew install helm kubeconform lefthook go-task terraform
 
 # Install git hooks
 lefthook install
@@ -115,7 +115,8 @@ For CI, use the `validate-helm.yml` callable workflow. It provisions the
 runner and invokes the same `helm:*` tasks that developers run locally. The
 tasks install no infrastructure outside an explicitly requested local Kind
 cluster, run strict linting, render for the requested Kubernetes version, and
-perform strict client-side Kubernetes schema validation.
+perform strict API-server-independent Kubernetes schema validation with
+Kubeconform.
 
 ## Task Reference
 
