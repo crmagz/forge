@@ -211,16 +211,15 @@ jobs:
             echo "| **Node.js** | \`${{ inputs.node-version }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  publish:
-    name: Publish
+  publish-aws:
+    name: Publish to AWS
     needs: [version, build]
-    if: needs.version.outputs.build-type != 'pr'
+    if: needs.version.outputs.build-type != 'pr' && ((inputs.container-registry == 'ecr' && inputs.ecr-repository != '') || inputs.codeartifact-domain != '')
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     permissions:
       contents: read
       id-token: write
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -237,14 +236,6 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Login to GHCR
-        if: inputs.container-registry == 'ghcr'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
       - name: Build and push ECR image
         if: inputs.ecr-repository != ''
         uses: crmagz/forge/.github/actions/docker-build@082ea3a719a03854e5c2f29f89df76587489ba1f
@@ -258,20 +249,6 @@ jobs:
           platforms: ${{ inputs.platforms }}
           build-args: ${{ inputs.build-args }}
           cache-registry: ${{ steps.ecr-login.outputs.registry }}/${{ inputs.ecr-repository }}:buildcache
-
-      - name: Build and push GHCR image
-        if: inputs.container-registry == 'ghcr'
-        uses: crmagz/forge/.github/actions/docker-build@082ea3a719a03854e5c2f29f89df76587489ba1f
-        with:
-          registry: ghcr.io
-          repository: ${{ inputs.ghcr-repository }}
-          tag: ${{ needs.version.outputs.image-tag }}
-          tag-latest: ${{ needs.version.outputs.build-type == 'release' && 'true' || 'false' }}
-          dockerfile: ${{ inputs.working-directory }}/${{ inputs.dockerfile }}
-          context: ${{ inputs.working-directory }}
-          platforms: ${{ inputs.platforms }}
-          build-args: ${{ inputs.build-args }}
-          cache-registry: ghcr.io/${{ inputs.ghcr-repository }}:buildcache
 
       - name: Login to CodeArtifact
         if: inputs.codeartifact-domain != ''
@@ -297,7 +274,52 @@ jobs:
       - name: Publish summary
         run: |
           {
-            echo "## Publish — \`${{ inputs.environment }}\`"
+            echo "## AWS publish — \`${{ inputs.environment }}\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| **Version** | \`${{ needs.version.outputs.version }}\` |"
+            echo "| **Build Type** | \`${{ needs.version.outputs.build-type }}\` |"
+            echo "| **Container Registry** | \`${{ inputs.container-registry }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-ghcr:
+    name: Publish to GHCR
+    needs: [version, build]
+    if: needs.version.outputs.build-type != 'pr' && inputs.container-registry == 'ghcr'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push GHCR image
+        uses: crmagz/forge/.github/actions/docker-build@082ea3a719a03854e5c2f29f89df76587489ba1f
+        with:
+          registry: ghcr.io
+          repository: ${{ inputs.ghcr-repository }}
+          tag: ${{ needs.version.outputs.image-tag }}
+          tag-latest: ${{ needs.version.outputs.build-type == 'release' && 'true' || 'false' }}
+          dockerfile: ${{ inputs.working-directory }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.working-directory }}
+          platforms: ${{ inputs.platforms }}
+          build-args: ${{ inputs.build-args }}
+          cache-registry: ghcr.io/${{ inputs.ghcr-repository }}:buildcache
+
+      - name: Publish summary
+        run: |
+          {
+            echo "## GHCR publish — \`${{ inputs.environment }}\`"
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
@@ -308,8 +330,13 @@ jobs:
 
   release:
     name: Release
-    needs: [version, publish]
-    if: needs.version.outputs.release-required == 'true'
+    needs: [version, build, publish-aws, publish-ghcr]
+    if: >-
+      always() &&
+      needs.version.outputs.release-required == 'true' &&
+      needs.build.result == 'success' &&
+      (needs.publish-aws.result == 'success' || needs.publish-aws.result == 'skipped') &&
+      (needs.publish-ghcr.result == 'success' || needs.publish-ghcr.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
